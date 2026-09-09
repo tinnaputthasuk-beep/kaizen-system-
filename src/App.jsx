@@ -658,7 +658,7 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments }) {
       <Field label="1. ที่มาของปัญหาและสถานการณ์ปัจจุบัน" required>
         <TextArea value={f.problem} onChange={(e) => set("problem", e.target.value)} placeholder="อธิบายปัญหาที่พบก่อนการปรับปรุง" />
       </Field>
-      <Field label="2. แนวทางการปรับปรุง" required>
+      <Field label="2. แนวทางการปรับปรุง Improvement Idea" required>
         <TextArea value={f.improvement} onChange={(e) => set("improvement", e.target.value)} placeholder="อธิบายวิธีการแก้ไข/ปรับปรุง" />
       </Field>
       <div className="grid grid-cols-2 gap-4">
@@ -909,43 +909,116 @@ function DetailView({ k }) {
   );
 }
 
+function SectionPanel({ number, title, headerColor, children }) {
+  return (
+    <div className="rounded-xl overflow-hidden border flex flex-col h-full" style={{ borderColor: "#D8DDE5" }}>
+      <div className="px-3 py-2 flex items-center gap-2 text-white text-sm font-semibold" style={{ background: headerColor }}>
+        <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-xs flex-shrink-0">{number}</span>
+        <span>{title}</span>
+      </div>
+      <div className="p-3 text-sm flex-1" style={{ color: INK, background: "#FBFBFC" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function PresentationView({ k }) {
   const [zoomSrc, setZoomSrc] = useState(null);
   return (
     <div className="rounded-xl overflow-hidden border" style={{ borderColor: "#D8DDE5" }}>
       <ImageLightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />
-      <div className="px-4 py-2.5" style={{ background: NAVY }}>
-        <div className="text-white text-xs opacity-80">Kaizen Project Improvement</div>
-        <div className="text-white text-lg font-semibold flex items-center gap-1.5">
-          <span>{k.title}</span>
+
+      {/* Header */}
+      <div className="px-5 py-3.5 flex items-center justify-between flex-wrap gap-2" style={{ background: NAVY }}>
+        <div className="text-white text-xl font-extrabold flex items-center gap-2">
+          <span>ไคเซ็น <span className="font-semibold opacity-90">(KAIZEN)</span></span>
           {k.attachments && k.attachments.length > 0 && (
-            <span title={`มีไฟล์แนบ ${k.attachments.length} ไฟล์`} className="inline-flex items-center flex-shrink-0 text-white/80">
-              <Paperclip size={15} />
+            <span title={`มีไฟล์แนบ ${k.attachments.length} ไฟล์`} className="inline-flex items-center flex-shrink-0 text-white/70">
+              <Paperclip size={17} />
             </span>
           )}
         </div>
-        <div className="text-white text-xs opacity-80 mt-0.5">{k.team} · {k.department}</div>
-      </div>
-      <div className="grid grid-cols-2 gap-4 p-5" style={{ background: "#FBFBFC" }}>
-        <ImageBox label="ก่อน (Before)" src={k.images.before} labelClassName="text-base font-semibold mb-2" onZoom={setZoomSrc} />
-        <ImageBox label="หลัง (After)" src={k.images.after} labelClassName="text-base font-semibold mb-2" onZoom={setZoomSrc} />
-      </div>
-      <div className="grid grid-cols-2 gap-4 px-5 pb-5 text-sm">
-        <div className="rounded-lg p-3" style={{ background: "#FDF3E6" }}>
-          <div className="font-semibold mb-1" style={{ color: "#8A5B14" }}>ปัญหาก่อนปรับปรุง</div>
-          <div style={{ color: INK }}>{k.problem || "-"}</div>
-        </div>
-        <div className="rounded-lg p-3" style={{ background: "#E9F5EF" }}>
-          <div className="font-semibold mb-1" style={{ color: "#1F5C40" }}>ผลลัพธ์ที่ได้รับ</div>
-          <div style={{ color: INK }}>{k.result || "ยังไม่มีข้อมูล"}</div>
+        <div className="flex items-center gap-5 text-white text-sm">
+          <div className="flex items-center gap-1.5">
+            <span className="opacity-75">หน่วยงาน</span>
+            <span className="font-semibold border-b border-white/40 pb-0.5">{k.department}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="opacity-75">วันที่</span>
+            <span className="font-semibold border-b border-white/40 pb-0.5">{k.date}</span>
+          </div>
         </div>
       </div>
-      <div className="px-5 pb-5 flex flex-wrap gap-2 items-end justify-between">
-        <CategoryTags categories={k.categories} />
-        <div className="text-right">
-          <div className="text-xs" style={{ color: SUB }}>Cost Saving: {k.costSaving ? `${k.costSaving} บาท/ปี` : "-"}</div>
-          <div className="text-xs mt-0.5" style={{ color: SUB }}>งบประมาณ: {k.budget ? `${k.budget} บาท` : "-"}</div>
+
+      <div className="p-5 space-y-4" style={{ background: "#F4F6F8" }}>
+        {/* Title */}
+        <div>
+          <div className="text-xs font-medium mb-1.5" style={{ color: SUB }}>ชื่อเรื่องไคเซ็น</div>
+          <div className="rounded-lg border px-4 py-2.5 text-base font-semibold" style={{ borderColor: "#D8DDE5", background: "white", color: INK }}>
+            {k.title}
+          </div>
         </div>
+
+        {/* 1-2-3: Problem / Improvement / Result */}
+        <div className="grid grid-cols-3 gap-3 items-stretch">
+          <SectionPanel number={1} title="ปัญหา / สภาพปัจจุบัน" headerColor={DB_DEEP}>
+            {k.problem || "-"}
+          </SectionPanel>
+          <SectionPanel number={2} title="แนวทางการปรับปรุง" headerColor="#1F8A70">
+            {k.improvement || "-"}
+          </SectionPanel>
+          <SectionPanel number={3} title="ผลที่ได้รับ" headerColor={GREEN}>
+            {k.result || "ยังไม่มีข้อมูล"}
+          </SectionPanel>
+        </div>
+
+        {/* Before/After (large) + Cost Saving highlight */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: "2fr 1fr" }}>
+          <div className="rounded-xl overflow-hidden border" style={{ borderColor: "#D8DDE5" }}>
+            <div className="px-3 py-2 flex items-center gap-2 text-white text-sm font-semibold" style={{ background: NAVY_DEEP }}>
+              <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-xs flex-shrink-0">4</span>
+              <span>ภาพก่อน–หลัง | เห็นการเปลี่ยนแปลงในทันที</span>
+            </div>
+            <div className="p-3 grid gap-2 items-center" style={{ gridTemplateColumns: "1fr auto 1fr", background: "#FBFBFC" }}>
+              <ImageBox label="ก่อนปรับปรุง" src={k.images.before} labelClassName="text-xs font-medium mb-1.5" boxClassName="h-56" onZoom={setZoomSrc} />
+              <ChevronRight size={26} style={{ color: "#AEB6C2" }} />
+              <ImageBox label="หลังปรับปรุง" src={k.images.after} labelClassName="text-xs font-medium mb-1.5" boxClassName="h-56" onZoom={setZoomSrc} />
+            </div>
+          </div>
+
+          <div className="rounded-xl overflow-hidden border flex flex-col" style={{ borderColor: "#D8DDE5" }}>
+            <div className="px-3 py-2 flex items-center gap-2 text-white text-sm font-semibold" style={{ background: `linear-gradient(135deg, #A8710F, ${GOLD})` }}>
+              <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-xs flex-shrink-0">5</span>
+              <span>ผลลัพธ์ | ตัวเลขที่ตรวจวัดผล</span>
+            </div>
+            <div
+              className="relative flex-1 flex flex-col items-center justify-center text-center px-4 py-6 overflow-hidden"
+              style={{ background: `linear-gradient(135deg, #A8710F, ${GOLD})`, minHeight: 240 }}
+            >
+              <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />
+              <div className="absolute -left-8 -bottom-8 w-28 h-28 rounded-full" style={{ background: "rgba(255,255,255,0.10)" }} />
+              <div className="relative w-10 h-10 rounded-full flex items-center justify-center mb-2" style={{ background: "rgba(255,255,255,0.25)" }}>
+                <Coins size={20} className="text-white" />
+              </div>
+              <div className="relative text-xs font-semibold text-white/90 tracking-wide">Cost Saving</div>
+              <div className="relative text-4xl font-extrabold text-white mt-1 tracking-tight">
+                {k.costSaving ? Number(k.costSaving).toLocaleString() : "0"}
+              </div>
+              <div className="relative text-xs text-white/85 font-medium mt-0.5">บาท / ปี</div>
+              <div className="relative mt-4 pt-3 text-xs text-white/80 w-full" style={{ borderTop: "1px solid rgba(255,255,255,0.3)" }}>
+                งบประมาณที่ใช้: {k.budget ? `${Number(k.budget).toLocaleString()} บาท` : "-"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {k.categories && k.categories.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs" style={{ color: SUB }}>หมวดหมู่:</span>
+            <CategoryTags categories={k.categories} />
+          </div>
+        )}
       </div>
     </div>
   );
