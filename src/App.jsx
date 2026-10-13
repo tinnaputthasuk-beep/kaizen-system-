@@ -130,6 +130,8 @@ const DEFAULT_DEPARTMENTS = [
   "C & B",
   "Recruitment & Training",
   "ER & Admin",
+  "Accounting",
+  "Procurement",
 ];
 
 // ---------- Mock directory (สาธิตเท่านั้น) ----------
@@ -216,6 +218,7 @@ const SECTION_OPTIONS = [
   "Warehouse",
   "SHE",
   "HRBP",
+  "Support Function",
 ];
 const SECTION_MAP = {
   "Production Planning & Data": "Production Planning & Data",
@@ -256,6 +259,8 @@ const SECTION_MAP = {
   "C & B": "HRBP",
   "Recruitment & Training": "HRBP",
   "ER & Admin": "HRBP",
+  "Accounting": "Support Function",
+  "Procurement": "Support Function",
 };
 
 const STATUS_META = {
@@ -3076,7 +3081,13 @@ export default function KaizenApp() {
       }
     } else {
       const id = uid();
-      const registeredNo = `KZ-2026-0${20 + kaizens.length}`;
+      // เลขที่ใหม่ = เลขสูงสุดของปีปัจจุบัน + 1 (รองรับข้อมูลที่นำเข้าจากระบบเดิม เช่น KZ-2026-146)
+      const year = new Date().getFullYear();
+      const maxNo = kaizens.reduce((m, k) => {
+        const hit = String(k.registeredNo || "").match(new RegExp(`^KZ-${year}-(\\d+)$`));
+        return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
+      }, 0);
+      const registeredNo = `KZ-${year}-${String(maxNo + 1).padStart(3, "0")}`;
       const newRecord = {
         id,
         registeredNo,
