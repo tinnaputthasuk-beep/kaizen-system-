@@ -3,7 +3,8 @@ import {
   LayoutDashboard, User, ShieldCheck, Building2, PlusCircle, Eye, Pencil,
   CheckCircle2, XCircle, Upload, X, Filter, ClipboardList, Presentation,
   Users, TrendingUp, ChevronRight, ImageOff, LogOut, Lock, KeyRound, AlertTriangle, Clock,
-  Download, Coins, Bell, BellRing, Undo2, Paperclip, FileVideo, FileSpreadsheet, FileText, ZoomIn
+  Download, Coins, Bell, BellRing, Undo2, Paperclip, FileVideo, FileSpreadsheet, FileText, ZoomIn,
+  Trophy, Medal, Plus, Trash2
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
@@ -13,6 +14,11 @@ import * as XLSX from "xlsx";
 
 // ---------- Design tokens ----------
 const COMPANY_LOGO = "/logo.png";
+// โลโก้สำรอง: ใช้อัตโนมัติเมื่อหาไฟล์ /logo.png ไม่เจอ
+const COMPANY_LOGO_FALLBACK = "data:image/png;base64,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";
+const useLogoFallback = (e) => {
+  if (e.currentTarget.src !== COMPANY_LOGO_FALLBACK) e.currentTarget.src = COMPANY_LOGO_FALLBACK;
+};
 
 const NAVY = "#12294B";
 const NAVY_DEEP = "#0B1D33";
@@ -50,6 +56,39 @@ async function syncKaizenToSheet(action, record) {
     // แต่จะทำงานได้ปกติเมื่อ deploy เป็นเว็บไซต์จริงแล้ว
     console.warn("Sync to Google Sheet failed:", err.message);
   }
+}
+
+// ---------- Kaizen Award: บันทึก/โหลดเกณฑ์และคะแนน ----------
+// ทำงานเมื่อ Code.gs มีส่วนเสริม Award แล้ว ถ้ายังไม่มี ระบบจะทำงานแบบโหมดทดลอง (เก็บในหน้าเว็บชั่วคราว)
+async function fetchAwardFromSheet() {
+  const res = await fetch(`${GOOGLE_SHEETS_API_URL}?type=award`);
+  if (!res.ok) throw new Error("load award failed");
+  const json = await res.json();
+  if (json && !Array.isArray(json) && Object.prototype.hasOwnProperty.call(json, "award")) {
+    return { supported: true, award: json.award };
+  }
+  return { supported: false, award: null };
+}
+
+async function postAward(action, record) {
+  try {
+    await fetch(GOOGLE_SHEETS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, record }),
+    });
+  } catch (err) {
+    console.warn("Save award failed:", err.message);
+  }
+}
+// บันทึกเฉพาะ "เกณฑ์/กรรมการ/ผลประกาศ" (ไม่รวมคะแนน) เพื่อไม่ให้ไปทับคะแนนของกรรมการ
+function saveAwardToSheet(award) {
+  const { scores, ...config } = award;
+  return postAward("saveAward", { id: "award", data: config });
+}
+// กรรมการแต่ละท่านบันทึกคะแนนของตัวเองแยกแถว จึงให้คะแนนพร้อมกันหลายคนได้โดยไม่ทับกัน
+function saveJudgeScoresToSheet(judgeId, judgeScores) {
+  return postAward("saveJudgeScores", { id: judgeId, judgeId, scores: judgeScores });
 }
 
 const DEFAULT_DEPARTMENTS = [
@@ -125,6 +164,12 @@ const MOCK_USERS = [
   { name: "ER & Admin", empId: "1024", role: "employee", departments: ["ER & Admin"] },
   { name: "Admin", empId: "0001", role: "admin", departments: [] },
   { name: "ผอ.โรงงาน", empId: "0002", role: "director", departments: [] },
+  // บัญชีคณะกรรมการ Kaizen Award (รหัสผ่านแยกกันคนละชุด เปลี่ยนได้ที่นี่)
+  { name: "กรรมการ 1", empId: "3001", role: "judge", departments: [] },
+  { name: "กรรมการ 2", empId: "3002", role: "judge", departments: [] },
+  { name: "กรรมการ 3", empId: "3003", role: "judge", departments: [] },
+  { name: "กรรมการ 4", empId: "3004", role: "judge", departments: [] },
+  { name: "กรรมการ 5", empId: "3005", role: "judge", departments: [] },
 
   { name: "ทิพวรรณ บุญจิตติ", empId: "2001", role: "supervisor", departments: ["Production Planning & Data"] },
   { name: "ธัญญธรณ์ สุขุมาลพันธ์", empId: "2002", role: "supervisor", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1", "Thread forming 3", "Packing 3"] },
@@ -138,7 +183,7 @@ const MOCK_USERS = [
   { name: "ติณณา พุทธสุข", empId: "2036", role: "supervisor", departments: ["C & B", "Recruitment & Training", "ER & Admin"] },
 ];
 
-const ROLE_LABEL = { employee: "พนักงาน", supervisor: "หัวหน้างาน", admin: "Admin (ฝ่ายบุคคล)", director: "ผู้อำนวยการโรงงาน" };
+const ROLE_LABEL = { employee: "พนักงาน", supervisor: "หัวหน้างาน", admin: "Admin (ฝ่ายบุคคล)", director: "ผู้อำนวยการโรงงาน", judge: "กรรมการตัดสิน Kaizen Award" };
 
 function buildInitialNotifications(kaizenList) {
   const list = [];
@@ -233,6 +278,7 @@ const nowStamp = () => {
   return `${todayISO()} ${hh}:${mm}`;
 };
 const emptyMembers = () => Array.from({ length: 10 }, () => ({ name: "", empId: "", dept: "" }));
+const fillMembers = (names) => emptyMembers().map((m, i) => (names[i] ? { ...m, name: names[i] } : m));
 
 const CHECKLIST_ITEMS = [
   "หัวข้อที่นำเสนอไม่ซ้ำกับหัวข้อเรื่องที่เคยทำมาแล้วในอดีตก่อนหน้านี้",
@@ -408,6 +454,75 @@ function seedData() {
         { stage: "Admin", actor: "Admin", action: "approve", comment: "", date: "2026-07-22 11:30" },
         { stage: "ผู้อำนวยการ", actor: "ผอ.โรงงาน", action: "approve", comment: "ผลดีมาก ให้เป็นต้นแบบให้คลังอื่น", date: "2026-07-25 15:05" },
       ],
+    }),
+    mk({
+      registeredNo: "KZ-2026-008",
+      date: "2026-06-12",
+      title: "ระบบแจ้งเตือนอุณหภูมิห้องเย็นอัตโนมัติ",
+      team: "ทีม QC & Engineering",
+      department: "QC",
+      submittedBy: "QC",
+      problem: "ตรวจอุณหภูมิห้องเย็นด้วยการจดมือวันละ 2 ครั้ง หากเกิดความผิดปกติช่วงกลางคืนจะรู้ช้า เสี่ยงต่อความปลอดภัยอาหาร",
+      improvement: "ติดตั้งเซนเซอร์อุณหภูมิพร้อมแจ้งเตือนผ่านไลน์กลุ่มเมื่อเกินค่ามาตรฐาน",
+      budget: "15000",
+      result: "ตรวจพบความผิดปกติภายใน 5 นาที ลดสินค้าเสียหายจากอุณหภูมิเป็นศูนย์",
+      costSaving: "65000",
+      costSavingCalc: "ลดสินค้าเสียหายเฉลี่ย 5,400 บาท/เดือน x 12 เดือน",
+      categories: ["Food Safety", "Quality"],
+      kaizenType: "Cross functional Kaizen",
+      members: fillMembers(["สมชาย ใจดี", "วิไล ศรีสุข", "ประเสริฐ มั่นคง", "อรุณี แก้วใส"]),
+      status: "approved",
+    }),
+    mk({
+      registeredNo: "KZ-2026-010",
+      date: "2026-05-28",
+      title: "ลดการสูญเสียแป้งระหว่างการลำเลียง",
+      team: "ทีม Thread forming 1",
+      department: "Thread forming 1",
+      submittedBy: "Production_Line 1",
+      problem: "แป้งหกตกหล่นบริเวณจุดต่อสายพานลำเลียง ต้องทิ้งเป็นของเสียทุกวัน",
+      improvement: "ออกแบบแผ่นกันหกและปรับมุมสายพาน พร้อมถาดรองแป้งกลับเข้าระบบ",
+      budget: "30000",
+      result: "ลดแป้งสูญเสียจาก 40 กก./วัน เหลือ 8 กก./วัน",
+      costSaving: "120000",
+      costSavingCalc: "ลดแป้งสูญเสีย 32 กก./วัน x 300 วัน x 12.5 บาท/กก.",
+      categories: ["Cost", "Environment"],
+      members: fillMembers(["มานพ รุ่งเรือง", "สุดา ทองดี", "เกรียงไกร พลอยงาม", "นภา สายสวัสดิ์", "ชัยวัฒน์ ดีเลิศ"]),
+      status: "approved",
+    }),
+    mk({
+      registeredNo: "KZ-2026-011",
+      date: "2026-06-30",
+      title: "ปรับรอบการเดินหม้อไอน้ำตามโหลดการผลิตจริง",
+      team: "ทีม Boiler",
+      department: "Boiler",
+      submittedBy: "Utility",
+      problem: "เดินหม้อไอน้ำเต็มกำลังตลอดกะ แม้ช่วงที่ไลน์ผลิตใช้ไอน้ำน้อย",
+      improvement: "จัดตารางเดินหม้อไอน้ำตามแผนการผลิตรายวันโดยไม่ต้องลงทุนเพิ่ม",
+      budget: "0",
+      result: "ลดการใช้เชื้อเพลิง 9%",
+      costSaving: "85000",
+      costSavingCalc: "ลดค่าเชื้อเพลิงเฉลี่ย 7,080 บาท/เดือน x 12 เดือน",
+      categories: ["Energy", "Cost"],
+      members: fillMembers(["ธนพล แสงทอง", "ปิยะ วงศ์ใหญ่"]),
+      status: "approved",
+    }),
+    mk({
+      registeredNo: "KZ-2026-012",
+      date: "2026-07-05",
+      title: "ป้ายบ่งชี้สารก่อภูมิแพ้ในไลน์บรรจุ",
+      team: "ทีม Packing 2",
+      department: "Packing 2",
+      submittedBy: "Production Line 2",
+      problem: "พนักงานใหม่สับสนจุดวางวัตถุดิบที่มีสารก่อภูมิแพ้ เสี่ยงปนเปื้อนข้าม",
+      improvement: "ทำป้ายสีและเส้นแบ่งพื้นที่สำหรับวัตถุดิบกลุ่มสารก่อภูมิแพ้",
+      budget: "1200",
+      result: "ไม่พบการวางผิดจุดตลอด 2 เดือนหลังปรับปรุง",
+      costSaving: "6000",
+      costSavingCalc: "ลดเวลาตรวจสอบซ้ำและของเสียจากการปนเปื้อน 500 บาท/เดือน x 12 เดือน",
+      categories: ["Food Safety"],
+      members: fillMembers(["รัตนา บุญมา", "สมศักดิ์ ใจงาม", "จันทร์เพ็ญ ศรีทอง"]),
+      status: "approved",
     }),
   ];
 }
@@ -1609,6 +1724,1119 @@ function Dashboard({ data, departments, onView, onPresent }) {
   );
 }
 
+// ---------- Kaizen Award (Admin คัดกรอง → กรรมการ 1-5 ให้คะแนนแยกกัน → ผอ. ยืนยันผล) ----------
+const AUTO_SOURCES = {
+  cost: "คำนวณจาก Cost Saving ตามช่วงมูลค่าที่ตั้งไว้ด้านล่าง",
+  roi: "คำนวณจาก Cost Saving ÷ งบประมาณที่ใช้ (ไม่ใช้งบ = 5 คะแนน)",
+  impact: "คำนวณจากหมวดหมู่ที่ Admin จัดไว้ (มีหมวดผลกระทบสูง = 5 คะแนน)",
+  team: "Cross functional = 5, สมาชิก 5 คนขึ้นไป = 4, 3-4 คน = 3, อื่นๆ = 2",
+};
+
+// บัญชีกรรมการ (ชื่อผู้ใช้ตรงกับ MOCK_USERS ที่ role = "judge")
+const JUDGE_SLOTS = [1, 2, 3, 4, 5].map((n) => ({ id: `j${n}`, userName: `กรรมการ ${n}` }));
+
+const DEFAULT_AWARD = {
+  roundName: "Kaizen Award 2026",
+  year: "all",
+  statuses: ["approved"],
+  activity: "Kaizen",
+  minCostSaving: 0,
+  mainPrizes: 3,
+  honorable: 2,
+  costTiers: [100000, 50000, 20000, 5000],
+  highImpactCats: ["Safety", "Food Safety", "Quality"],
+  criteria: [
+    { id: "cost", name: "มูลค่า Cost Saving", weight: 30, type: "auto", source: "cost" },
+    { id: "impact", name: "ผลกระทบด้าน Safety / Quality / Food Safety", weight: 25, type: "auto", source: "impact" },
+    { id: "innov", name: "ความคิดสร้างสรรค์ / ความแปลกใหม่", weight: 15, type: "manual" },
+    { id: "roi", name: "ความคุ้มค่าการลงทุน (ROI)", weight: 10, type: "auto", source: "roi" },
+    { id: "team", name: "การทำงานเป็นทีม / ข้ามสายงาน", weight: 10, type: "auto", source: "team" },
+    { id: "yokoten", name: "ขยายผลไปหน่วยงานอื่นได้ (Yokoten)", weight: 10, type: "manual" },
+  ],
+  judgeCount: 5,
+  judgeNames: {}, // { j1: "ชื่อจริงของกรรมการ (ไม่บังคับ)" }
+  trimExtremes: true,
+  shortlist: [], // id ของ Kaizen ที่ Admin ส่งให้กรรมการ
+  sentAt: null,
+  sentBy: null,
+  scores: {}, // { j1: { [kaizenId]: { [criterionId]: 1..5, __note: "" }, __meta: { submittedAt } } }
+  decision: null,
+};
+
+function normalizeAward(a) {
+  const base = { ...DEFAULT_AWARD, ...(a || {}) };
+  delete base.judges; // รุ่นก่อนหน้า (Admin/ผอ. เป็นกรรมการ) ไม่ใช้แล้ว
+  base.judgeCount = Math.min(5, Math.max(1, toNum(base.judgeCount) || 5));
+  base.judgeNames = base.judgeNames || {};
+  base.shortlist = Array.isArray(base.shortlist) ? base.shortlist : [];
+  base.scores = base.scores || {};
+  return base;
+}
+
+const activeJudges = (cfg) =>
+  JUDGE_SLOTS.slice(0, cfg.judgeCount).map((j) => {
+    const real = String(cfg.judgeNames?.[j.id] || "").trim();
+    return { ...j, name: real ? `${j.userName} · ${real}` : j.userName };
+  });
+
+const AWARD_TIERS = [
+  { label: "รางวัลชนะเลิศ", short: "ชนะเลิศ", color: "#B07D1A", bg: "#FDF3E1", border: "#E8C77E" },
+  { label: "รองชนะเลิศอันดับ 1", short: "รองฯ 1", color: "#5F6F84", bg: "#EEF1F5", border: "#C3CCD8" },
+  { label: "รองชนะเลิศอันดับ 2", short: "รองฯ 2", color: "#94592F", bg: "#F7ECE3", border: "#DDB89A" },
+];
+const HONOR_TIER = { label: "รางวัลชมเชย", short: "ชมเชย", color: GREEN, bg: "#E9F5EF", border: "#A9D6BF" };
+const CRIT_COLORS = ["#1D5FC9", "#D99A2B", "#7A5AE0", "#2F7D5C", "#D9577E", "#2BA3B8", "#8A6D3B", "#B23A2E"];
+const JUDGE_PURPLE = "#6A4BC9";
+
+function toNum(v) {
+  const n = parseFloat(String(v ?? "").replace(/,/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+const fmtScore = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+const namedMemberCount = (k) => (k.members || []).filter((m) => m && String(m.name || "").trim()).length;
+const byRegNo = (a, b) => String(a.registeredNo).localeCompare(String(b.registeredNo));
+
+function autoScore(source, k, cfg) {
+  const cs = toNum(k.costSaving);
+  if (source === "cost") {
+    const t = cfg.costTiers;
+    if (cs <= 0) return 0;
+    if (cs >= t[0]) return 5;
+    if (cs >= t[1]) return 4;
+    if (cs >= t[2]) return 3;
+    if (cs >= t[3]) return 2;
+    return 1;
+  }
+  if (source === "roi") {
+    if (cs <= 0) return 0;
+    const b = toNum(k.budget);
+    if (b <= 0) return 5;
+    const r = cs / b;
+    if (r >= 10) return 5;
+    if (r >= 5) return 4;
+    if (r >= 2) return 3;
+    if (r >= 1) return 2;
+    return 1;
+  }
+  if (source === "impact") {
+    const cats = k.categories || [];
+    if (cats.some((c) => cfg.highImpactCats.includes(c))) return 5;
+    return cats.length ? 3 : 1;
+  }
+  if (source === "team") {
+    if (k.kaizenType === "Cross functional Kaizen") return 5;
+    const n = namedMemberCount(k);
+    if (n >= 5) return 4;
+    if (n >= 3) return 3;
+    return 2;
+  }
+  return 0;
+}
+
+function autoReason(source, k) {
+  const cs = toNum(k.costSaving);
+  if (source === "cost") return cs ? `${cs.toLocaleString()} บาท/ปี` : "ไม่มี Cost Saving";
+  if (source === "roi") {
+    const b = toNum(k.budget);
+    if (cs <= 0) return "ไม่มี Cost Saving";
+    return b <= 0 ? "ไม่ใช้งบประมาณ" : `คืนทุน ${(cs / b).toFixed(1)} เท่า`;
+  }
+  if (source === "impact") return (k.categories || []).join(", ") || "ยังไม่จัดหมวด";
+  if (source === "team") return k.kaizenType === "Cross functional Kaizen" ? "Cross functional" : `สมาชิก ${namedMemberCount(k)} คน`;
+  return "";
+}
+
+function eligibleForAward(kaizens, cfg) {
+  return kaizens.filter(
+    (k) =>
+      cfg.statuses.includes(k.status) &&
+      (cfg.activity === "all" || (k.activityType || "Kaizen") === cfg.activity) &&
+      toNum(k.costSaving) >= toNum(cfg.minCostSaving) &&
+      (cfg.year === "all" || String(k.date || "").startsWith(cfg.year))
+  );
+}
+const shortlisted = (kaizens, cfg) => kaizens.filter((k) => cfg.shortlist.includes(k.id));
+
+/** คะแนนคัดกรองเบื้องต้น (ใช้เฉพาะเกณฑ์อัตโนมัติ) คิดเป็น % */
+function prescreen(k, cfg) {
+  const auto = cfg.criteria.filter((c) => c.type === "auto");
+  const w = auto.reduce((s, c) => s + toNum(c.weight), 0);
+  if (!w) return 0;
+  const pts = auto.reduce((s, c) => s + (toNum(c.weight) * autoScore(c.source, k, cfg)) / 5, 0);
+  return Math.round((pts / w) * 100);
+}
+
+/** คะแนนของกรรมการแต่ละคนในเกณฑ์หนึ่ง + ค่าเฉลี่ย (ตัดสูงสุด-ต่ำสุดเมื่อมีกรรมการ 4 คนขึ้นไป ถ้าเปิดใช้) */
+function manualStats(k, c, cfg) {
+  const byJudge = activeJudges(cfg).map((j) => ({ judge: j, v: cfg.scores?.[j.id]?.[k.id]?.[c.id] }));
+  const vals = byJudge.filter((x) => typeof x.v === "number").map((x) => x.v);
+  let used = vals;
+  const trimmed = cfg.trimExtremes && vals.length >= 4;
+  if (trimmed) used = [...vals].sort((a, b) => a - b).slice(1, -1);
+  const avg = used.length ? used.reduce((s, v) => s + v, 0) / used.length : null;
+  return { byJudge, vals, avg, trimmed, spread: vals.length ? Math.max(...vals) - Math.min(...vals) : 0 };
+}
+
+function scoreKaizen(k, cfg) {
+  const totalW = cfg.criteria.reduce((s, c) => s + toNum(c.weight), 0) || 1;
+  const manual = cfg.criteria.filter((c) => c.type === "manual");
+  let total = 0;
+  const parts = cfg.criteria.map((c, i) => {
+    let s;
+    let stats = null;
+    if (c.type === "auto") s = autoScore(c.source, k, cfg);
+    else {
+      stats = manualStats(k, c, cfg);
+      s = stats.avg ?? 0;
+    }
+    const pts = ((toNum(c.weight) / totalW) * 100 * s) / 5;
+    total += pts;
+    return { id: c.id, name: c.name, type: c.type, score: Math.round(s * 10) / 10, pts, stats, color: CRIT_COLORS[i % CRIT_COLORS.length] };
+  });
+  const pendingJudges = activeJudges(cfg).filter((j) => manual.some((c) => typeof cfg.scores?.[j.id]?.[k.id]?.[c.id] !== "number")).length;
+  return { k, total: Math.round(total * 10) / 10, pendingJudges, parts };
+}
+
+function rankAward(kaizens, cfg) {
+  return shortlisted(kaizens, cfg)
+    .map((k) => scoreKaizen(k, cfg))
+    .sort((a, b) => b.total - a.total || toNum(b.k.costSaving) - toNum(a.k.costSaving))
+    .map((r, i) => ({
+      ...r,
+      rank: i + 1,
+      tier: i < cfg.mainPrizes ? AWARD_TIERS[i] : i < cfg.mainPrizes + cfg.honorable ? HONOR_TIER : null,
+    }));
+}
+
+function judgeProgress(cfg, items) {
+  const manual = cfg.criteria.filter((c) => c.type === "manual");
+  const total = items.length * manual.length;
+  return activeJudges(cfg).map((j) => {
+    let done = 0;
+    items.forEach((k) => manual.forEach((c) => typeof cfg.scores?.[j.id]?.[k.id]?.[c.id] === "number" && done++));
+    return { judge: j, done, total, submittedAt: cfg.scores?.[j.id]?.__meta?.submittedAt || null };
+  });
+}
+
+function buildAwardInsights(results, cfg, progress) {
+  if (!results.length) return [];
+  const out = [];
+  const [first, second] = results;
+  const strengths = (r) => [...r.parts].sort((a, b) => b.pts - a.pts).slice(0, 2).map((p) => p.name);
+  out.push(`ผู้ชนะเลิศคือ "${first.k.title}" (${first.k.department}) ได้ ${first.total} คะแนน จุดแข็งคือ ${strengths(first).join(" และ ")}`);
+  if (second) {
+    const gap = Math.round((first.total - second.total) * 10) / 10;
+    out.push(
+      gap < 3
+        ? `อันดับ 1 และ 2 ห่างกันเพียง ${gap} คะแนน ถือว่าสูสีมาก แนะนำให้พิจารณาเพิ่มเติม หรือเชิญทั้งสองทีมนำเสนอต่อคณะกรรมการก่อนยืนยันผล`
+        : `อันดับ 1 นำอันดับ 2 อยู่ ${gap} คะแนน ผลการตัดสินค่อนข้างชัดเจน`
+    );
+  }
+  const disagree = [];
+  results.forEach((r) => r.parts.forEach((p) => p.stats && p.stats.vals.length >= 2 && p.stats.spread >= 3 && disagree.push({ r, p })));
+  disagree
+    .sort((a, b) => b.p.stats.spread - a.p.stats.spread)
+    .slice(0, 2)
+    .forEach(({ r, p }) =>
+      out.push(`กรรมการให้คะแนนเรื่อง "${r.k.title}" ในเกณฑ์ "${p.name}" ต่างกันมาก (ต่ำสุด ${Math.min(...p.stats.vals)} สูงสุด ${Math.max(...p.stats.vals)}) ควรหารือร่วมกันก่อนยืนยันผล`)
+    );
+  if (cfg.trimExtremes && cfg.judgeCount >= 4) out.push("ใช้วิธีตัดคะแนนสูงสุดและต่ำสุดออกก่อนเฉลี่ย เพื่อลดผลจากอคติของกรรมการรายบุคคล");
+  const winners = results.filter((r) => r.tier);
+  out.push(`เรื่องที่ได้รับรางวัลทั้ง ${winners.length} เรื่อง สร้าง Cost Saving รวม ${winners.reduce((s, r) => s + toNum(r.k.costSaving), 0).toLocaleString()} บาท/ปี`);
+  const notSubmitted = progress.filter((p) => !p.submittedAt);
+  if (notSubmitted.length) out.push(`กรรมการที่ยังไม่ได้กดส่งคะแนน: ${notSubmitted.map((p) => `${p.judge.userName} (${p.done}/${p.total})`).join(", ")} ผลตอนนี้จึงยังไม่ใช่ผลสุดท้าย`);
+  return out;
+}
+
+function TierBadge({ tier, small }) {
+  if (!tier) return <span className="text-xs" style={{ color: SUB }}>-</span>;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap ${small ? "text-[11px] px-2 py-0.5" : "text-xs px-2.5 py-1"}`}
+      style={{ background: tier.bg, color: tier.color, border: `1px solid ${tier.border}` }}
+    >
+      {tier === HONOR_TIER ? <Medal size={small ? 11 : 13} /> : <Trophy size={small ? 11 : 13} />}
+      {small ? tier.short : tier.label}
+    </span>
+  );
+}
+
+function ContributionBar({ parts, height = 10 }) {
+  return (
+    <div className="w-full rounded-full overflow-hidden flex" style={{ height, background: "#EEF0F3" }}>
+      {parts.map((p) => (
+        <div key={p.id} title={`${p.name}: ${fmtScore(p.score)}/5 (${p.pts.toFixed(1)} คะแนน)`} style={{ width: `${p.pts}%`, background: p.color }} />
+      ))}
+    </div>
+  );
+}
+
+function ProgressBar({ done, total, color = JUDGE_PURPLE }) {
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "#ECE8F8" }}>
+      <div style={{ width: `${pct}%`, height: "100%", background: done >= total && total ? GREEN : color }} />
+    </div>
+  );
+}
+
+function AwardSection({ title, sub, children, right }) {
+  return (
+    <div className="bg-white rounded-xl border p-4 md:p-5" style={{ borderColor: "#E3E7ED" }}>
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <div className="text-sm font-semibold" style={{ color: INK }}>{title}</div>
+          {sub && <div className="text-xs mt-0.5" style={{ color: SUB }}>{sub}</div>}
+        </div>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AwardHeader({ cfg, onRename, editable, subtitle, syncMode, onRefresh }) {
+  return (
+    <div className="rounded-xl p-4 md:p-5 flex items-center justify-between gap-3 flex-wrap" style={{ background: `linear-gradient(135deg, ${NAVY_DEEP}, ${NAVY})` }}>
+      <div className="flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: GOLD }}>
+          <Trophy size={22} color={NAVY_DEEP} />
+        </div>
+        <div>
+          <input
+            value={cfg.roundName}
+            onChange={(e) => onRename && onRename(e.target.value)}
+            disabled={!editable}
+            className="bg-transparent text-white text-lg font-semibold outline-none border-b border-transparent focus:border-white/40"
+          />
+          <div className="text-xs" style={{ color: "#AFC0D6" }}>{subtitle}</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {syncMode === "sheet" && (
+          <button onClick={onRefresh} className="text-[11px] px-2.5 py-1 rounded-full border text-white" style={{ borderColor: "#5D7699" }}>
+            โหลดข้อมูลล่าสุด
+          </button>
+        )}
+        <span className="text-[11px] px-2.5 py-1 rounded-full" style={syncMode === "sheet" ? { background: "#E9F5EF", color: GREEN } : { background: "#FDF3E1", color: "#8A5B14" }}>
+          {syncMode === "sheet" ? "บันทึกลง Google Sheet อัตโนมัติ" : "โหมดทดลอง: ข้อมูลจะหายเมื่อรีเฟรชหน้า"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ================= หน้า Admin / ผอ. =================
+function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onPresent, onAnnounce, onSendToJudges, onRefresh, syncMode }) {
+  const cfg = award;
+  const isDirector = currentUser.role === "director";
+  const [sub, setSub] = useState("criteria");
+  const [confirming, setConfirming] = useState(false);
+  const [selected, setSelected] = useState(() => new Set(cfg.shortlist));
+  const [topN, setTopN] = useState(5);
+  const [unlocking, setUnlocking] = useState(null);
+  const [judgeFilter, setJudgeFilter] = useState("all");
+
+  const locked = !!cfg.decision;
+  const set = (patch) => onChange({ ...cfg, ...patch });
+  const judges = activeJudges(cfg);
+  const eligible = useMemo(() => eligibleForAward(kaizens, cfg).map((k) => ({ k, pre: prescreen(k, cfg) })).sort((a, b) => b.pre - a.pre || toNum(b.k.costSaving) - toNum(a.k.costSaving)), [kaizens, cfg]);
+  const results = useMemo(() => rankAward(kaizens, cfg), [kaizens, cfg]);
+  const items = useMemo(() => shortlisted(kaizens, cfg), [kaizens, cfg]);
+  const progress = useMemo(() => judgeProgress(cfg, items), [cfg, items]);
+  const insights = useMemo(() => buildAwardInsights(results, cfg, progress), [results, cfg, progress]);
+  const totalW = cfg.criteria.reduce((s, c) => s + toNum(c.weight), 0);
+  const manualCrit = cfg.criteria.filter((c) => c.type === "manual");
+  const autoCrit = cfg.criteria.filter((c) => c.type === "auto");
+  const submittedCount = progress.filter((p) => p.submittedAt).length;
+  const years = useMemo(() => [...new Set(kaizens.map((k) => String(k.date || "").slice(0, 4)).filter((y) => /^\d{4}$/.test(y)))].sort().reverse(), [kaizens]);
+  const shortlistChanged = selected.size !== cfg.shortlist.length || [...selected].some((id) => !cfg.shortlist.includes(id));
+
+  // ---- criteria
+  const setCrit = (id, patch) => set({ criteria: cfg.criteria.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
+  const removeCrit = (id) => cfg.criteria.length > 1 && set({ criteria: cfg.criteria.filter((c) => c.id !== id) });
+  const addCrit = () => set({ criteria: [...cfg.criteria, { id: `m_${uid()}`, name: "เกณฑ์ใหม่ (กรรมการให้คะแนน)", weight: 5, type: "manual" }] });
+  const normalize = () => {
+    if (!totalW) return;
+    const scaled = cfg.criteria.map((c) => ({ ...c, weight: Math.round((toNum(c.weight) / totalW) * 100) }));
+    scaled[0].weight += 100 - scaled.reduce((s, c) => s + c.weight, 0);
+    set({ criteria: scaled });
+  };
+  const toggleStatus = (s) => set({ statuses: cfg.statuses.includes(s) ? cfg.statuses.filter((x) => x !== s) : [...cfg.statuses, s] });
+  const toggleImpact = (c) => set({ highImpactCats: cfg.highImpactCats.includes(c) ? cfg.highImpactCats.filter((x) => x !== c) : [...cfg.highImpactCats, c] });
+
+  // ---- screening
+  const toggleSel = (id) => setSelected((s) => {
+    const n = new Set(s);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+  const pickTop = () => setSelected(new Set(eligible.slice(0, Math.max(1, toNum(topN))).map((x) => x.k.id)));
+  const sendShortlist = () => {
+    const ids = eligible.filter((x) => selected.has(x.k.id)).map((x) => x.k.id);
+    if (!ids.length) return;
+    set({ shortlist: ids, sentAt: nowStamp(), sentBy: currentUser.name });
+    onSendToJudges(ids.length);
+    setSub("tracking");
+  };
+
+  const unlockJudge = (jid) => {
+    const cur = cfg.scores[jid] || {};
+    const { __meta, ...rest } = cur;
+    onScore(jid, rest);
+    setUnlocking(null);
+  };
+
+  const exportExcel = () => {
+    const rows = results.map((r) => {
+      const row = { อันดับ: r.rank, รางวัล: r.tier ? r.tier.label : "", เลขที่: r.k.registeredNo, เรื่อง: r.k.title, หน่วยงาน: r.k.department, ผู้ส่งเรื่อง: r.k.submittedBy, "Cost Saving (บาท/ปี)": toNum(r.k.costSaving) };
+      r.parts.forEach((p) => (row[`${p.name} (${p.type === "manual" ? "เฉลี่ยกรรมการ" : "อัตโนมัติ"}/5)`] = p.score));
+      row["คะแนนรวม (เต็ม 100)"] = r.total;
+      return row;
+    });
+    const perJudge = [];
+    judges.forEach((j) =>
+      results.forEach((r) => {
+        const row = { กรรมการ: j.name, เลขที่: r.k.registeredNo, เรื่อง: r.k.title };
+        manualCrit.forEach((c) => (row[c.name] = cfg.scores?.[j.id]?.[r.k.id]?.[c.id] ?? ""));
+        row["ความเห็น"] = cfg.scores?.[j.id]?.[r.k.id]?.__note || "";
+        perJudge.push(row);
+      })
+    );
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "ผลการตัดสิน");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(perJudge), "คะแนนรายกรรมการ");
+    XLSX.writeFile(wb, `${cfg.roundName.replace(/\s+/g, "_")}_ผลการตัดสิน.xlsx`);
+  };
+
+  const confirmResult = () => {
+    const winners = results.filter((r) => r.tier).map((r) => ({ id: r.k.id, registeredNo: r.k.registeredNo, title: r.k.title, department: r.k.department, submittedBy: r.k.submittedBy, tier: r.tier.label, total: r.total }));
+    set({ decision: { confirmedBy: currentUser.name, confirmedAt: nowStamp(), winners } });
+    onAnnounce(winners);
+    setConfirming(false);
+  };
+
+  const disabledStyle = locked ? { opacity: 0.55, pointerEvents: "none" } : {};
+  const SUBTABS = [
+    { key: "criteria", label: "1. ตั้งเกณฑ์" },
+    { key: "screen", label: `2. คัดกรอง & ส่งกรรมการ${cfg.shortlist.length ? ` (${cfg.shortlist.length})` : ""}` },
+    { key: "tracking", label: `3. ติดตามกรรมการ (${submittedCount}/${judges.length})` },
+    { key: "scores", label: "4. คะแนนกรรมการ" },
+    { key: "result", label: "5. ผลการตัดสิน" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <AwardHeader
+        cfg={cfg}
+        editable={!locked}
+        onRename={(v) => set({ roundName: v })}
+        subtitle={`Admin คัดกรอง → ส่งกรรมการ ${judges.length} ท่านให้คะแนนแยกกัน → ผู้อำนวยการยืนยันผล`}
+        syncMode={syncMode}
+        onRefresh={onRefresh}
+      />
+
+      {locked && (
+        <div className="rounded-xl p-4 border flex items-center justify-between gap-3 flex-wrap" style={{ background: "#FDF3E1", borderColor: "#E8C77E" }}>
+          <div className="text-sm" style={{ color: "#6B4A10" }}>
+            <strong>ประกาศผลแล้ว</strong> โดย {cfg.decision.confirmedBy} เมื่อ {cfg.decision.confirmedAt} · เกณฑ์และคะแนนถูกล็อกไว้
+          </div>
+          {isDirector && (
+            <button onClick={() => set({ decision: null })} className="text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: "#C9962B", color: "#6B4A10" }}>
+              ยกเลิกการประกาศ & เปิดแก้ไข
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-1 bg-white rounded-xl border p-1 w-fit flex-wrap" style={{ borderColor: "#E3E7ED" }}>
+        {SUBTABS.map((t) => (
+          <button key={t.key} onClick={() => setSub(t.key)} className="px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium" style={sub === t.key ? { background: NAVY, color: "white" } : { color: SUB }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ---------------- 1. CRITERIA ---------------- */}
+      {sub === "criteria" && (
+        <div className="space-y-4" style={disabledStyle}>
+          <AwardSection title="ผู้มีสิทธิ์เข้าประกวด" sub="กำหนดว่า Kaizen แบบไหนบ้างที่จะเข้าสู่การคัดกรอง" right={<span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>เข้าเกณฑ์ {eligible.length} เรื่อง</span>}>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <Field label="ปีที่ส่งเรื่อง">
+                <select className={inputCls} style={inputStyle} value={cfg.year} onChange={(e) => set({ year: e.target.value })}>
+                  <option value="all">ทุกปี</option>
+                  {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </Field>
+              <Field label="ประเภทกิจกรรม">
+                <select className={inputCls} style={inputStyle} value={cfg.activity} onChange={(e) => set({ activity: e.target.value })}>
+                  <option value="Kaizen">Kaizen</option>
+                  <option value="Suggestion">Suggestion</option>
+                  <option value="all">ทั้งหมด</option>
+                </select>
+              </Field>
+              <Field label="Cost Saving ขั้นต่ำ (บาท/ปี)">
+                <TextInput type="number" value={cfg.minCostSaving} onChange={(e) => set({ minCostSaving: e.target.value })} />
+              </Field>
+              <Field label="สถานะที่นับ">
+                <div className="flex flex-col gap-1.5 pt-1">
+                  {[["approved", "อนุมัติแล้ว"], ["pending_director", "รอผู้อำนวยการ"]].map(([s, l]) => (
+                    <label key={s} className="flex items-center gap-2 text-sm" style={{ color: INK }}>
+                      <input type="checkbox" checked={cfg.statuses.includes(s)} onChange={() => toggleStatus(s)} /> {l}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          </AwardSection>
+
+          <AwardSection
+            title="เกณฑ์การให้คะแนนและน้ำหนัก"
+            sub="เกณฑ์อัตโนมัติใช้คัดกรองในขั้นตอนที่ 2 · เกณฑ์สีม่วงให้คณะกรรมการเป็นผู้ให้คะแนน · รวมเป็นคะแนนเต็ม 100"
+            right={
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={totalW === 100 ? { background: "#E9F5EF", color: GREEN } : { background: "#FBEAE8", color: RED }}>น้ำหนักรวม {totalW}%</span>
+                {totalW !== 100 && <button onClick={normalize} className="text-xs px-2.5 py-1 rounded-lg border font-medium" style={{ borderColor: NAVY, color: NAVY }}>ปรับให้รวม 100%</button>}
+              </div>
+            }
+          >
+            <div className="space-y-2">
+              {cfg.criteria.map((c, i) => (
+                <div key={c.id} className="rounded-lg border p-3 flex flex-col md:flex-row md:items-center gap-3" style={{ borderColor: "#E3E7ED" }}>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: CRIT_COLORS[i % CRIT_COLORS.length] }} />
+                    <div className="flex-1 min-w-0">
+                      <input value={c.name} onChange={(e) => setCrit(c.id, { name: e.target.value })} className="w-full text-sm font-medium outline-none bg-transparent" style={{ color: INK }} />
+                      <div className="text-[11px] mt-0.5" style={{ color: SUB }}>{c.type === "auto" ? AUTO_SOURCES[c.source] : "กรรมการแต่ละท่านให้คะแนน 1-5 แยกกัน แล้วระบบหาค่าเฉลี่ย"}</div>
+                    </div>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0" style={c.type === "auto" ? { background: "#EAF3FC", color: "#1D5FC9" } : { background: "#F1ECFD", color: JUDGE_PURPLE }}>
+                      {c.type === "auto" ? "อัตโนมัติ" : "กรรมการให้คะแนน"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 md:w-72">
+                    <input type="range" min={0} max={50} value={toNum(c.weight)} onChange={(e) => setCrit(c.id, { weight: Number(e.target.value) })} className="flex-1" />
+                    <input type="number" value={c.weight} onChange={(e) => setCrit(c.id, { weight: toNum(e.target.value) })} className="w-14 rounded border px-1.5 py-1 text-sm text-right" style={inputStyle} />
+                    <span className="text-xs" style={{ color: SUB }}>%</span>
+                    <button onClick={() => removeCrit(c.id)} title="ลบเกณฑ์" className="p-1 rounded hover:bg-red-50"><Trash2 size={15} color={RED} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={addCrit} className="mt-3 text-sm font-medium flex items-center gap-1.5" style={{ color: NAVY }}><Plus size={16} /> เพิ่มเกณฑ์ที่กรรมการให้คะแนน</button>
+          </AwardSection>
+
+          <AwardSection title="คณะกรรมการ" sub="กรรมการแต่ละท่านมีบัญชีและรหัสผ่านของตัวเอง เข้าระบบแล้วจะเห็นเฉพาะหน้าให้คะแนนของตัวเอง ไม่เห็นคะแนนของกรรมการท่านอื่น">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-sm" style={{ color: INK }}>จำนวนกรรมการรอบนี้</span>
+              <select className="rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} value={cfg.judgeCount} onChange={(e) => set({ judgeCount: Number(e.target.value) })}>
+                {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} ท่าน</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {JUDGE_SLOTS.map((j, idx) => {
+                const active = idx < cfg.judgeCount;
+                const acct = MOCK_USERS.find((u) => u.name === j.userName);
+                return (
+                  <div key={j.id} className="rounded-lg border p-3" style={{ borderColor: active ? "#DCD3F5" : "#EEF0F3", background: active ? "#FBFAFF" : "#F7F8FA", opacity: active ? 1 : 0.55 }}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: active ? JUDGE_PURPLE : "#AEB6C2" }}>{idx + 1}</div>
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold" style={{ color: INK }}>{j.userName}</div>
+                        <div className="text-[11px]" style={{ color: SUB }}>ชื่อผู้ใช้: {j.userName} · รหัสผ่าน: <span className="font-mono">{acct ? acct.empId : "-"}</span></div>
+                      </div>
+                      {!active && <span className="text-[10px]" style={{ color: SUB }}>ไม่ใช้รอบนี้</span>}
+                    </div>
+                    <input
+                      value={cfg.judgeNames?.[j.id] || ""}
+                      onChange={(e) => set({ judgeNames: { ...cfg.judgeNames, [j.id]: e.target.value } })}
+                      disabled={!active}
+                      placeholder="ชื่อจริงของกรรมการ (ไม่บังคับ)"
+                      className="mt-2 w-full rounded border px-2 py-1 text-xs"
+                      style={inputStyle}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <label className="mt-3 flex items-start gap-2 text-sm" style={{ color: INK }}>
+              <input type="checkbox" className="mt-0.5" checked={cfg.trimExtremes} onChange={(e) => set({ trimExtremes: e.target.checked })} />
+              <span>
+                ตัดคะแนนสูงสุดและต่ำสุดออกก่อนเฉลี่ย เมื่อมีกรรมการให้คะแนนตั้งแต่ 4 ท่านขึ้นไป
+                <span className="block text-[11px]" style={{ color: SUB }}>ช่วยลดผลจากกรรมการที่ให้คะแนนสูงหรือต่ำผิดปกติ</span>
+              </span>
+            </label>
+          </AwardSection>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <AwardSection title="ช่วงคะแนน Cost Saving" sub="ใช้กับเกณฑ์ 'มูลค่า Cost Saving'">
+              <div className="space-y-2">
+                {[5, 4, 3, 2].map((pt, i) => (
+                  <div key={pt} className="flex items-center gap-2 text-sm" style={{ color: INK }}>
+                    <span className="w-16 whitespace-nowrap">{pt} คะแนน</span>
+                    <span style={{ color: SUB }}>ตั้งแต่</span>
+                    <input type="number" value={cfg.costTiers[i]} onChange={(e) => set({ costTiers: cfg.costTiers.map((v, k2) => (k2 === i ? toNum(e.target.value) : v)) })} className="flex-1 rounded border px-2 py-1 text-sm text-right" style={inputStyle} />
+                    <span className="text-xs" style={{ color: SUB }}>บาท</span>
+                  </div>
+                ))}
+                <div className="text-xs" style={{ color: SUB }}>ต่ำกว่านั้นแต่มากกว่า 0 = 1 คะแนน</div>
+              </div>
+            </AwardSection>
+            <AwardSection title="หมวดผลกระทบสูง" sub="Kaizen ที่อยู่ในหมวดเหล่านี้ได้ 5 คะแนนในเกณฑ์ผลกระทบ">
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORY_OPTIONS.map((c) => (
+                  <button key={c} onClick={() => toggleImpact(c)} className="text-xs px-2.5 py-1 rounded-full border" style={cfg.highImpactCats.includes(c) ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: SUB }}>{c}</button>
+                ))}
+              </div>
+            </AwardSection>
+            <AwardSection title="จำนวนรางวัล">
+              <div className="space-y-3">
+                <Field label="รางวัลหลัก (ชนะเลิศ / รองชนะเลิศ)">
+                  <select className={inputCls} style={inputStyle} value={cfg.mainPrizes} onChange={(e) => set({ mainPrizes: Number(e.target.value) })}>
+                    {[1, 2, 3].map((n) => <option key={n} value={n}>{n} รางวัล</option>)}
+                  </select>
+                </Field>
+                <Field label="รางวัลชมเชย">
+                  <select className={inputCls} style={inputStyle} value={cfg.honorable} onChange={(e) => set({ honorable: Number(e.target.value) })}>
+                    {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} รางวัล</option>)}
+                  </select>
+                </Field>
+              </div>
+            </AwardSection>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={() => setSub("screen")} className="px-4 py-2 rounded-lg text-sm font-medium text-white flex items-center gap-1.5" style={{ background: NAVY }}>ไปขั้นตอนคัดกรอง <ChevronRight size={16} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- 2. SCREENING ---------------- */}
+      {sub === "screen" && (
+        <div className="space-y-4" style={disabledStyle}>
+          <AwardSection
+            title="คัดกรองเบื้องต้นตามเกณฑ์อัตโนมัติ"
+            sub="ระบบจัดเรียงจาก 'คะแนนคัดกรอง' (คำนวณจากเกณฑ์อัตโนมัติเท่านั้น) · ติ๊กเลือกเรื่องที่จะส่งให้คณะกรรมการตัดสิน"
+            right={<span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: "#F1ECFD", color: JUDGE_PURPLE }}>เลือกแล้ว {selected.size} / {eligible.length}</span>}
+          >
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-sm" style={{ color: INK }}>เลือกอันดับสูงสุด</span>
+              <input type="number" min={1} value={topN} onChange={(e) => setTopN(e.target.value)} className="w-16 rounded border px-2 py-1 text-sm text-right" style={inputStyle} />
+              <span className="text-sm" style={{ color: INK }}>เรื่อง</span>
+              <button onClick={pickTop} className="text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: NAVY, color: NAVY }}>เลือกอัตโนมัติ</button>
+              <button onClick={() => setSelected(new Set(eligible.map((x) => x.k.id)))} className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: "#D8DDE5", color: SUB }}>เลือกทั้งหมด</button>
+              <button onClick={() => setSelected(new Set())} className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: "#D8DDE5", color: SUB }}>ล้างการเลือก</button>
+            </div>
+            {eligible.length === 0 ? (
+              <div className="text-sm py-8 text-center" style={{ color: SUB }}>ยังไม่มี Kaizen ที่เข้าเกณฑ์ ลองปรับเงื่อนไขในขั้นตอนที่ 1</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" style={{ minWidth: 760 }}>
+                  <thead>
+                    <tr className="text-left" style={{ color: SUB }}>
+                      <th className="py-2 w-10" />
+                      <th className="py-2 font-medium" style={{ minWidth: 220 }}>เรื่อง</th>
+                      {autoCrit.map((c) => (
+                        <th key={c.id} className="py-2 px-2 font-medium text-center text-xs" style={{ minWidth: 100 }}>{c.name}</th>
+                      ))}
+                      <th className="py-2 px-2 font-medium" style={{ minWidth: 150 }}>คะแนนคัดกรอง</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {eligible.map(({ k, pre }) => (
+                      <tr key={k.id} className="border-t cursor-pointer" style={{ borderColor: "#EEF0F3", background: selected.has(k.id) ? "#F6F2FF" : undefined }} onClick={() => toggleSel(k.id)}>
+                        <td className="py-2.5 text-center"><input type="checkbox" checked={selected.has(k.id)} onChange={() => toggleSel(k.id)} onClick={(e) => e.stopPropagation()} /></td>
+                        <td className="py-2.5 pr-3">
+                          <div className="font-medium" style={{ color: INK }}>{k.title}</div>
+                          <div className="text-xs" style={{ color: SUB }}>{k.registeredNo} · {k.department}</div>
+                        </td>
+                        {autoCrit.map((c) => (
+                          <td key={c.id} className="py-2 px-2 text-center">
+                            <div className="font-semibold text-sm" style={{ color: "#1D5FC9" }}>{autoScore(c.source, k, cfg)}/5</div>
+                            <div className="text-[10px] truncate max-w-[120px] mx-auto" style={{ color: SUB }}>{autoReason(c.source, k)}</div>
+                          </td>
+                        ))}
+                        <td className="py-2 px-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "#EEF0F3" }}><div style={{ width: `${pre}%`, height: "100%", background: "#1D5FC9" }} /></div>
+                            <span className="text-sm font-bold w-10 text-right" style={{ color: NAVY }}>{pre}%</span>
+                          </div>
+                        </td>
+                        <td className="py-2 pl-2">
+                          <button onClick={(e) => { e.stopPropagation(); onView(k); }} title="ดูรายละเอียด" className="p-1.5 rounded hover:bg-slate-100"><Eye size={16} color={NAVY} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </AwardSection>
+          <div className="bg-white rounded-xl border p-4 flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "#E3E7ED" }}>
+            <div className="text-sm" style={{ color: INK }}>
+              {cfg.shortlist.length ? (
+                <>ส่งให้กรรมการแล้ว <strong>{cfg.shortlist.length} เรื่อง</strong> เมื่อ {cfg.sentAt}{shortlistChanged && <span style={{ color: RED }}> · มีการเปลี่ยนรายการ ยังไม่ได้ส่งใหม่</span>}</>
+              ) : (
+                "ยังไม่ได้ส่งเรื่องให้คณะกรรมการ"
+              )}
+            </div>
+            <button
+              onClick={sendShortlist}
+              disabled={!selected.size || (!shortlistChanged && cfg.shortlist.length > 0)}
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-40"
+              style={{ background: JUDGE_PURPLE }}
+            >
+              <Trophy size={16} /> {cfg.shortlist.length ? "อัปเดตรายการที่ส่งกรรมการ" : `ส่ง ${selected.size} เรื่องให้กรรมการตัดสิน`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- 3. TRACKING ---------------- */}
+      {sub === "tracking" && (
+        <AwardSection title="ความคืบหน้าของคณะกรรมการ" sub="Admin และผู้อำนวยการเห็นเฉพาะความคืบหน้า กรรมการแต่ละท่านไม่เห็นคะแนนของกันและกัน">
+          {!items.length ? (
+            <div className="text-sm py-8 text-center" style={{ color: SUB }}>ยังไม่ได้ส่งเรื่องให้กรรมการ (ทำในขั้นตอนที่ 2)</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {progress.map((p) => {
+                const status = p.submittedAt ? "ส่งคะแนนแล้ว" : p.done === 0 ? "ยังไม่เริ่ม" : "กำลังให้คะแนน";
+                const color = p.submittedAt ? GREEN : p.done === 0 ? SUB : JUDGE_PURPLE;
+                return (
+                  <div key={p.judge.id} className="rounded-lg border p-3" style={{ borderColor: "#E3E7ED" }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-semibold" style={{ color: INK }}>{p.judge.name}</div>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ color, background: p.submittedAt ? "#E9F5EF" : "#F4F6F8" }}>{status}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <ProgressBar done={p.done} total={p.total} />
+                      <span className="text-[11px] whitespace-nowrap" style={{ color: SUB }}>{p.done}/{p.total}</span>
+                    </div>
+                    {p.submittedAt && <div className="text-[11px] mt-1.5" style={{ color: SUB }}>ส่งเมื่อ {p.submittedAt}</div>}
+                    {p.submittedAt && !locked &&
+                      (unlocking === p.judge.id ? (
+                        <div className="flex gap-1 mt-2">
+                          <button onClick={() => setUnlocking(null)} className="text-[11px] px-2 py-1 rounded border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+                          <button onClick={() => unlockJudge(p.judge.id)} className="text-[11px] px-2 py-1 rounded text-white" style={{ background: JUDGE_PURPLE }}>ยืนยันเปิดให้แก้ไข</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setUnlocking(p.judge.id)} className="text-[11px] mt-2 underline" style={{ color: JUDGE_PURPLE }}>เปิดให้กรรมการแก้ไขคะแนน</button>
+                      ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </AwardSection>
+      )}
+
+      {/* ---------------- 4. JUDGE SCORES ---------------- */}
+      {sub === "scores" && (
+        <div className="space-y-4">
+          {results.length === 0 ? (
+            <AwardSection title="คะแนนกรรมการ"><div className="text-sm py-8 text-center" style={{ color: SUB }}>ยังไม่ได้ส่งเรื่องให้กรรมการ</div></AwardSection>
+          ) : (
+            <>
+              <AwardSection
+                title="ภาพรวมค่าเฉลี่ยของแต่ละ Kaizen"
+                sub={`ค่าเฉลี่ยคะแนนกรรมการ (เต็ม 5) ในแต่ละเกณฑ์${cfg.trimExtremes && judges.length >= 4 ? " · ตัดคะแนนสูงสุด-ต่ำสุดออกเมื่อมีกรรมการให้คะแนน 4 ท่านขึ้นไป" : ""} · ตัวเลขสีแดง = กรรมการให้คะแนนต่างกันตั้งแต่ 3 คะแนนขึ้นไป`}
+                right={<button onClick={exportExcel} className="text-xs px-3 py-1.5 rounded-lg border font-medium flex items-center gap-1.5" style={{ borderColor: GREEN, color: GREEN }}><FileSpreadsheet size={14} /> Export Excel</button>}
+              >
+                <div style={{ width: "100%", height: 240 }}>
+                  <ResponsiveContainer>
+                    <BarChart data={results.map((r) => { const row = { name: r.k.registeredNo }; r.parts.forEach((p) => { if (p.type === "manual") row[p.name] = p.stats.avg === null ? 0 : Math.round(p.stats.avg * 10) / 10; }); return row; })} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#EEF0F3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: SUB }} />
+                      <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tick={{ fontSize: 11, fill: SUB }} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {manualCrit.map((c) => {
+                        const idx = cfg.criteria.findIndex((x) => x.id === c.id);
+                        return <Bar key={c.id} dataKey={c.name} fill={CRIT_COLORS[idx % CRIT_COLORS.length]} radius={[4, 4, 0, 0]} />;
+                      })}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="overflow-x-auto mt-3">
+                  <table className="w-full text-sm" style={{ minWidth: 720 }}>
+                    <thead>
+                      <tr className="text-left" style={{ color: SUB }}>
+                        <th className="py-2 w-12 font-medium">อันดับ</th>
+                        <th className="py-2 font-medium" style={{ minWidth: 220 }}>เรื่อง</th>
+                        {manualCrit.map((c) => <th key={c.id} className="py-2 px-2 font-medium text-center text-xs" style={{ minWidth: 110 }}>{c.name}</th>)}
+                        <th className="py-2 px-2 font-medium text-center text-xs">เฉลี่ยกรรมการ<br />(เต็ม 5)</th>
+                        <th className="py-2 px-2 font-medium text-center text-xs">คะแนนรวม<br />(เต็ม 100)</th>
+                        <th className="py-2 px-2 font-medium text-center text-xs">กรรมการ<br />ที่ให้คะแนน</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.map((r) => {
+                        const mParts = r.parts.filter((p) => p.type === "manual");
+                        const avgs = mParts.map((p) => p.stats.avg).filter((v) => v !== null);
+                        const judgeAvg = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+                        const scoredBy = judges.filter((j) => mParts.some((p) => typeof cfg.scores?.[j.id]?.[r.k.id]?.[p.id] === "number")).length;
+                        return (
+                          <tr key={r.k.id} className="border-t" style={{ borderColor: "#EEF0F3" }}>
+                            <td className="py-2.5 font-semibold" style={{ color: NAVY }}>{r.rank}</td>
+                            <td className="py-2.5 pr-3"><div className="font-medium" style={{ color: INK }}>{r.k.title}</div><div className="text-xs" style={{ color: SUB }}>{r.k.registeredNo} · {r.k.department}</div></td>
+                            {mParts.map((p) => (
+                              <td key={p.id} className="py-2.5 px-2 text-center">
+                                <div className="font-bold" style={{ color: p.stats.spread >= 3 ? RED : JUDGE_PURPLE }}>{p.stats.avg === null ? "-" : fmtScore(Math.round(p.stats.avg * 10) / 10)}</div>
+                                {p.stats.vals.length > 0 && <div className="text-[10px]" style={{ color: SUB }}>ต่ำสุด {Math.min(...p.stats.vals)} · สูงสุด {Math.max(...p.stats.vals)}</div>}
+                              </td>
+                            ))}
+                            <td className="py-2.5 px-2 text-center font-semibold" style={{ color: INK }}>{judgeAvg === null ? "-" : judgeAvg.toFixed(2)}</td>
+                            <td className="py-2.5 px-2 text-center font-bold" style={{ color: NAVY }}>{r.total}</td>
+                            <td className="py-2.5 px-2 text-center text-xs" style={{ color: scoredBy === judges.length ? GREEN : SUB }}>{scoredBy}/{judges.length}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </AwardSection>
+
+              <AwardSection
+                title="คะแนนที่กรรมการแต่ละท่านส่งเข้ามา"
+                sub="แยกตาม Kaizen · คะแนนที่มีขีดฆ่า = ถูกตัดออกตามกติกาตัดสูงสุด-ต่ำสุด · กรรมการที่ยังไม่กดส่งจะแสดงเป็น 'ร่าง'"
+                right={
+                  <select className="rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} value={judgeFilter} onChange={(e) => setJudgeFilter(e.target.value)}>
+                    <option value="all">กรรมการทุกท่าน</option>
+                    {judges.map((j) => <option key={j.id} value={j.id}>{j.name}</option>)}
+                  </select>
+                }
+              >
+                <div className="space-y-4">
+                  {results.map((r) => {
+                    const mParts = r.parts.filter((p) => p.type === "manual");
+                    // หาคะแนนที่ถูกตัดออก (ต่ำสุด 1 ค่า และสูงสุด 1 ค่า) ของแต่ละเกณฑ์
+                    const dropped = {};
+                    mParts.forEach((p) => {
+                      if (!p.stats.trimmed) return;
+                      const scored = p.stats.byJudge.filter((x) => typeof x.v === "number");
+                      const lo = scored.reduce((a, b) => (b.v < a.v ? b : a));
+                      const hi = scored.filter((x) => x !== lo).reduce((a, b) => (b.v > a.v ? b : a));
+                      dropped[p.id] = new Set([lo.judge.id, hi.judge.id]);
+                    });
+                    const shown = judges.filter((j) => judgeFilter === "all" || j.id === judgeFilter);
+                    return (
+                      <div key={r.k.id} className="rounded-lg border" style={{ borderColor: "#E3E7ED" }}>
+                        <div className="px-3 py-2.5 flex items-center justify-between gap-2 flex-wrap" style={{ background: "#F7F8FA" }}>
+                          <div>
+                            <div className="text-sm font-semibold" style={{ color: INK }}><span style={{ color: NAVY }}>#{r.rank}</span> {r.k.title}</div>
+                            <div className="text-xs" style={{ color: SUB }}>{r.k.registeredNo} · {r.k.department}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <TierBadge tier={r.tier} small />
+                            <span className="text-sm font-bold" style={{ color: NAVY }}>{r.total} คะแนน</span>
+                            <button onClick={() => onView(r.k)} title="ดูรายละเอียด" className="p-1 rounded hover:bg-white"><Eye size={15} color={NAVY} /></button>
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm" style={{ minWidth: 640 }}>
+                            <thead>
+                              <tr className="text-left" style={{ color: SUB }}>
+                                <th className="py-2 px-3 font-medium" style={{ minWidth: 170 }}>กรรมการ</th>
+                                {mParts.map((p) => <th key={p.id} className="py-2 px-2 font-medium text-center text-xs" style={{ minWidth: 100 }}>{p.name}</th>)}
+                                <th className="py-2 px-2 font-medium text-center text-xs">เฉลี่ยของท่าน</th>
+                                <th className="py-2 px-3 font-medium text-xs" style={{ minWidth: 200 }}>ความเห็น</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {shown.map((j) => {
+                                const row = cfg.scores?.[j.id]?.[r.k.id] || {};
+                                const submitted = !!cfg.scores?.[j.id]?.__meta?.submittedAt;
+                                const nums = mParts.map((p) => row[p.id]).filter((v) => typeof v === "number");
+                                const mine = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+                                return (
+                                  <tr key={j.id} className="border-t" style={{ borderColor: "#EEF0F3", opacity: submitted ? 1 : 0.7 }}>
+                                    <td className="py-2 px-3">
+                                      <div className="font-medium" style={{ color: INK }}>{j.name}</div>
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={submitted ? { background: "#E9F5EF", color: GREEN } : { background: "#F4F6F8", color: SUB }}>{submitted ? "ส่งแล้ว" : "ร่าง (ยังไม่กดส่ง)"}</span>
+                                    </td>
+                                    {mParts.map((p) => {
+                                      const v = row[p.id];
+                                      const cut = dropped[p.id]?.has(j.id);
+                                      return (
+                                        <td key={p.id} className="py-2 px-2 text-center">
+                                          {typeof v === "number" ? (
+                                            <span className="inline-flex w-8 h-8 rounded-lg items-center justify-center font-bold" title={cut ? "ถูกตัดออกตามกติกาตัดสูงสุด-ต่ำสุด" : ""} style={cut ? { background: "#F4F6F8", color: "#9AA4B2", textDecoration: "line-through" } : { background: "#F1ECFD", color: JUDGE_PURPLE }}>{v}</span>
+                                          ) : (
+                                            <span style={{ color: "#C3CAD4" }}>-</span>
+                                          )}
+                                        </td>
+                                      );
+                                    })}
+                                    <td className="py-2 px-2 text-center font-semibold" style={{ color: INK }}>{mine === null ? "-" : mine.toFixed(1)}</td>
+                                    <td className="py-2 px-3 text-xs" style={{ color: row.__note ? INK : "#C3CAD4" }}>{row.__note || "-"}</td>
+                                  </tr>
+                                );
+                              })}
+                              <tr className="border-t" style={{ borderColor: "#D8DDE5", background: "#FBFAFF" }}>
+                                <td className="py-2 px-3 text-xs font-semibold" style={{ color: JUDGE_PURPLE }}>ค่าเฉลี่ยที่ใช้คำนวณ</td>
+                                {mParts.map((p) => (
+                                  <td key={p.id} className="py-2 px-2 text-center font-bold" style={{ color: p.stats.spread >= 3 ? RED : JUDGE_PURPLE }}>{p.stats.avg === null ? "-" : fmtScore(Math.round(p.stats.avg * 10) / 10)}</td>
+                                ))}
+                                <td colSpan={2} />
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </AwardSection>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ---------------- 5. RESULT ---------------- */}
+      {sub === "result" && (
+        <div className="space-y-4">
+          {results.length === 0 ? (
+            <AwardSection title="ผลการตัดสิน"><div className="text-sm py-8 text-center" style={{ color: SUB }}>ยังไม่ได้ส่งเรื่องให้กรรมการ</div></AwardSection>
+          ) : (
+            <>
+              {submittedCount < judges.length && (
+                <div className="rounded-xl p-3 border text-sm" style={{ background: "#FBEAE8", borderColor: "#F0C3BD", color: "#8B2E24" }}>
+                  กรรมการส่งคะแนนแล้ว {submittedCount} จาก {judges.length} ท่าน ผลด้านล่างเป็นผลเบื้องต้นจากคะแนนที่มีอยู่ตอนนี้
+                </div>
+              )}
+              <div className={`grid grid-cols-1 gap-4 ${cfg.mainPrizes === 3 ? "md:grid-cols-3" : cfg.mainPrizes === 2 ? "md:grid-cols-2" : ""}`}>
+                {results.slice(0, cfg.mainPrizes).map((r) => {
+                  const top2 = [...r.parts].sort((a, b) => b.pts - a.pts).slice(0, 2);
+                  return (
+                    <div key={r.k.id} className="bg-white rounded-xl border-2 p-4 flex flex-col" style={{ borderColor: r.tier.border }}>
+                      <div className="flex items-center justify-between"><TierBadge tier={r.tier} /><span className="text-xs" style={{ color: SUB }}>อันดับ {r.rank}</span></div>
+                      <div className="mt-3 font-semibold leading-snug" style={{ color: INK }}>{r.k.title}</div>
+                      <div className="text-xs mt-0.5" style={{ color: SUB }}>{r.k.department} · {r.k.registeredNo}</div>
+                      <div className="flex items-end gap-1 mt-3"><span className="text-3xl font-bold" style={{ color: r.tier.color }}>{r.total}</span><span className="text-xs mb-1" style={{ color: SUB }}>/ 100 คะแนน</span></div>
+                      <div className="mt-2"><ContributionBar parts={r.parts} height={9} /></div>
+                      <div className="text-xs mt-2" style={{ color: INK }}><span style={{ color: SUB }}>จุดเด่น: </span>{top2.map((p) => p.name).join(", ")}</div>
+                      <div className="text-xs mt-1" style={{ color: INK }}><span style={{ color: SUB }}>Cost Saving: </span>{toNum(r.k.costSaving).toLocaleString()} บาท/ปี</div>
+                      <div className="flex gap-2 mt-auto pt-3">
+                        <button onClick={() => onView(r.k)} className="flex-1 text-xs py-1.5 rounded-lg border font-medium" style={{ borderColor: "#D8DDE5", color: NAVY }}>ดูรายละเอียด</button>
+                        <button onClick={() => onPresent(r.k)} className="flex-1 text-xs py-1.5 rounded-lg font-medium text-white" style={{ background: NAVY }}>นำเสนอ</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <AwardSection title="บทวิเคราะห์ผลการตัดสิน" sub="สรุปอัตโนมัติจากคะแนนเฉลี่ยของคณะกรรมการตามเกณฑ์ที่ตั้งไว้">
+                <ul className="space-y-1.5">
+                  {insights.map((s, i) => (
+                    <li key={i} className="text-sm flex gap-2" style={{ color: INK }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: GOLD }} /><span>{s}</span></li>
+                  ))}
+                </ul>
+              </AwardSection>
+
+              <AwardSection
+                title="ตารางจัดอันดับทั้งหมด"
+                sub="แถบสีแสดงว่าคะแนนมาจากเกณฑ์ใดบ้าง · ชี้ที่แถบเพื่อดูรายละเอียด"
+                right={<button onClick={exportExcel} className="text-xs px-3 py-1.5 rounded-lg border font-medium flex items-center gap-1.5" style={{ borderColor: GREEN, color: GREEN }}><FileSpreadsheet size={14} /> Export Excel</button>}
+              >
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {cfg.criteria.map((c, i) => (
+                    <span key={c.id} className="text-[11px] flex items-center gap-1" style={{ color: SUB }}><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CRIT_COLORS[i % CRIT_COLORS.length] }} /> {c.name}</span>
+                  ))}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm" style={{ minWidth: 640 }}>
+                    <thead>
+                      <tr className="text-left" style={{ color: SUB }}>
+                        <th className="py-2 w-12 font-medium">อันดับ</th>
+                        <th className="py-2 font-medium">เรื่อง</th>
+                        <th className="py-2 font-medium w-56">ที่มาของคะแนน</th>
+                        <th className="py-2 font-medium text-center w-16">คะแนน</th>
+                        <th className="py-2 font-medium w-28">รางวัล</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.map((r) => (
+                        <tr key={r.k.id} className="border-t" style={{ borderColor: "#EEF0F3", background: r.tier ? r.tier.bg + "66" : undefined }}>
+                          <td className="py-2.5 font-semibold" style={{ color: NAVY }}>{r.rank}</td>
+                          <td className="py-2.5 pr-3"><div className="font-medium" style={{ color: INK }}>{r.k.title}</div><div className="text-xs" style={{ color: SUB }}>{r.k.department}</div></td>
+                          <td className="py-2.5 pr-3"><ContributionBar parts={r.parts} /></td>
+                          <td className="py-2.5 text-center font-bold" style={{ color: NAVY }}>{r.total}</td>
+                          <td className="py-2.5"><TierBadge tier={r.tier} small /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </AwardSection>
+
+              {!locked && (
+                <div className="bg-white rounded-xl border p-4 flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "#E3E7ED" }}>
+                  <div className="text-sm" style={{ color: INK }}>
+                    {isDirector
+                      ? submittedCount < judges.length
+                        ? `ยังมีกรรมการ ${judges.length - submittedCount} ท่านที่ยังไม่ส่งคะแนน แนะนำให้รอครบก่อนยืนยันผล`
+                        : "กรรมการส่งคะแนนครบแล้ว สามารถยืนยันและประกาศผลได้"
+                      : "ผู้อำนวยการโรงงานเป็นผู้ยืนยันผลขั้นสุดท้าย ระบบจะแจ้งเตือนทีมที่ได้รับรางวัลอัตโนมัติ"}
+                  </div>
+                  {isDirector &&
+                    (confirming ? (
+                      <div className="flex gap-2">
+                        <button onClick={() => setConfirming(false)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+                        <button onClick={confirmResult} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: GREEN }}>ยืนยันประกาศผล</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirming(true)} className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5" style={{ background: GOLD, color: NAVY_DEEP }}><Trophy size={16} /> ยืนยันผลและประกาศรางวัล</button>
+                    ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================= หน้ากรรมการ (แยกต่างหาก เห็นเฉพาะคะแนนของตัวเอง) =================
+function JudgePage({ kaizens, award, currentUser, onScore, onView, onPresent, onSubmitted, onRefresh, syncMode }) {
+  const cfg = award;
+  const slotIndex = JUDGE_SLOTS.findIndex((j) => j.userName === currentUser.name);
+  const judge = JUDGE_SLOTS[slotIndex];
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const items = useMemo(() => shortlisted(kaizens, cfg).sort(byRegNo), [kaizens, cfg]);
+  const manualCrit = cfg.criteria.filter((c) => c.type === "manual");
+  const autoCrit = cfg.criteria.filter((c) => c.type === "auto");
+
+  if (!judge || slotIndex >= cfg.judgeCount) {
+    return <div className="bg-white rounded-xl border p-6 text-sm" style={{ borderColor: "#E3E7ED", color: SUB }}>บัญชีนี้ไม่ได้อยู่ในคณะกรรมการ {cfg.roundName}</div>;
+  }
+  const realName = String(cfg.judgeNames?.[judge.id] || "").trim();
+  const my = cfg.scores[judge.id] || {};
+  const submittedAt = my.__meta?.submittedAt;
+  const locked = !!submittedAt || !!cfg.decision;
+  const total = items.length * manualCrit.length;
+  const done = items.reduce((s, k) => s + manualCrit.filter((c) => typeof my[k.id]?.[c.id] === "number").length, 0);
+  const complete = total > 0 && done >= total;
+
+  const update = (kid, patch) => {
+    if (locked) return;
+    const row = { ...(my[kid] || {}), ...patch };
+    Object.keys(patch).forEach((key) => patch[key] === undefined && delete row[key]);
+    onScore(judge.id, { ...my, [kid]: row });
+  };
+  const setScore = (kid, cid, v) => update(kid, { [cid]: my[kid]?.[cid] === v ? undefined : v });
+  const submit = () => {
+    onScore(judge.id, { ...my, __meta: { submittedAt: nowStamp() } });
+    onSubmitted(judge);
+    setConfirmSubmit(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <AwardHeader cfg={cfg} editable={false} subtitle={`หน้าให้คะแนนของ ${judge.userName}${realName ? ` (${realName})` : ""} · คะแนนของท่านเป็นความลับ กรรมการท่านอื่นมองไม่เห็น`} syncMode={syncMode} onRefresh={onRefresh} />
+
+      {cfg.decision ? (
+        <AwardSection title="ประกาศผลแล้ว" sub={`ยืนยันโดย ${cfg.decision.confirmedBy} เมื่อ ${cfg.decision.confirmedAt} · ขอบคุณที่ร่วมเป็นคณะกรรมการ`}>
+          <div className="space-y-1.5">
+            {cfg.decision.winners.map((w) => (
+              <div key={w.id} className="flex items-center gap-2 text-sm" style={{ color: INK }}>
+                <TierBadge tier={[...AWARD_TIERS, HONOR_TIER].find((t) => t.label === w.tier)} small />
+                <span className="font-medium">{w.title}</span>
+                <span className="text-xs" style={{ color: SUB }}>{w.department}</span>
+              </div>
+            ))}
+          </div>
+        </AwardSection>
+      ) : (
+        <AwardSection
+          title={submittedAt ? "ท่านส่งคะแนนเรียบร้อยแล้ว" : "วิธีให้คะแนน"}
+          sub={submittedAt ? `ส่งเมื่อ ${submittedAt} · หากต้องการแก้ไข โปรดติดต่อ Admin` : "อ่านรายละเอียดแต่ละเรื่อง แล้วให้คะแนนเกณฑ์สีม่วง 1 = น้อย, 5 = ดีเยี่ยม · ใส่ความเห็นได้ (ไม่บังคับ) · ครบแล้วกด \"ส่งคะแนน\""}
+          right={
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={complete ? { background: "#E9F5EF", color: GREEN } : { background: "#F1ECFD", color: JUDGE_PURPLE }}>
+              {complete ? "ให้คะแนนครบแล้ว" : `ให้คะแนนแล้ว ${done}/${total}`}
+            </span>
+          }
+        >
+          <ProgressBar done={done} total={total} />
+        </AwardSection>
+      )}
+
+      {items.length === 0 ? (
+        <div className="bg-white rounded-xl border p-8 text-sm text-center" style={{ borderColor: "#E3E7ED", color: SUB }}>ยังไม่มีเรื่องที่ส่งมาให้ตัดสิน Admin จะแจ้งเตือนเมื่อมีเรื่องเข้ามา</div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {items.map((k, idx) => {
+            const row = my[k.id] || {};
+            const kDone = manualCrit.every((c) => typeof row[c.id] === "number");
+            return (
+              <div key={k.id} className="bg-white rounded-xl border p-4" style={{ borderColor: kDone ? "#A9D6BF" : "#E3E7ED" }}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[11px] font-semibold" style={{ color: JUDGE_PURPLE }}>เรื่องที่ {idx + 1} / {items.length}</div>
+                    <div className="font-semibold leading-snug mt-0.5" style={{ color: INK }}>{k.title}</div>
+                    <div className="text-xs mt-0.5" style={{ color: SUB }}>{k.registeredNo} · {k.department}</div>
+                  </div>
+                  {kDone && <span className="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: "#E9F5EF", color: GREEN }}>ครบแล้ว</span>}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {autoCrit.map((c) => (
+                    <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>{autoReason(c.source, k)}</span>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => onView(k)} className="flex-1 text-xs py-1.5 rounded-lg border font-medium flex items-center justify-center gap-1" style={{ borderColor: "#D8DDE5", color: NAVY }}><Eye size={13} /> ดูรายละเอียด</button>
+                  <button onClick={() => onPresent(k)} className="flex-1 text-xs py-1.5 rounded-lg border font-medium flex items-center justify-center gap-1" style={{ borderColor: "#D8DDE5", color: NAVY }}><Presentation size={13} /> ดูแบบนำเสนอ</button>
+                </div>
+                <div className="mt-3 space-y-2.5" style={locked ? { opacity: 0.7, pointerEvents: "none" } : {}}>
+                  {manualCrit.map((c) => (
+                    <div key={c.id}>
+                      <div className="text-xs font-medium mb-1" style={{ color: INK }}>{c.name} <span style={{ color: SUB }}>({c.weight}%)</span></div>
+                      <div className="flex gap-1.5">
+                        {[1, 2, 3, 4, 5].map((v) => (
+                          <button
+                            key={v}
+                            onClick={() => setScore(k.id, c.id, v)}
+                            className="flex-1 h-9 rounded-lg text-sm font-semibold border"
+                            style={row[c.id] === v ? { background: JUDGE_PURPLE, borderColor: JUDGE_PURPLE, color: "white" } : { borderColor: "#DCD3F5", color: JUDGE_PURPLE, background: "#FAF8FF" }}
+                          >
+                            {v}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <textarea
+                    value={row.__note || ""}
+                    onChange={(e) => update(k.id, { __note: e.target.value })}
+                    placeholder="ความเห็นของกรรมการ (ไม่บังคับ)"
+                    className="w-full rounded-lg border px-3 py-2 text-xs outline-none"
+                    style={{ ...inputStyle, minHeight: 52 }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {items.length > 0 && !locked && (
+        <div className="bg-white rounded-xl border p-4 flex items-center justify-between gap-3 flex-wrap sticky bottom-3" style={{ borderColor: "#E3E7ED", boxShadow: "0 6px 20px rgba(11,29,51,0.10)" }}>
+          <div className="text-sm" style={{ color: INK }}>{complete ? "ให้คะแนนครบทุกเรื่องแล้ว ตรวจทานแล้วกดส่งคะแนนได้เลย" : `ยังเหลืออีก ${total - done} ช่อง`}</div>
+          {confirmSubmit ? (
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmSubmit(false)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>กลับไปแก้ไข</button>
+              <button onClick={submit} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: GREEN }}>ยืนยันส่งคะแนน</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmSubmit(true)} disabled={!complete} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-40" style={{ background: JUDGE_PURPLE }}>
+              ส่งคะแนน
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin }) {
   const [name, setName] = useState("");
   const [pass, setPass] = useState("");
@@ -1651,7 +2879,7 @@ function LoginScreen({ onLogin }) {
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3 justify-center mb-6">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-white p-1.5 shadow-lg">
-            <img src={COMPANY_LOGO} alt="Company Logo" className="w-full h-full object-contain" />
+            <img src={COMPANY_LOGO} onError={useLogoFallback} alt="Company Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="text-white font-semibold text-sm leading-tight">Kaizen System</div>
@@ -1724,7 +2952,7 @@ function LoginScreen({ onLogin }) {
         </button>
         {showDemo && (
           <div className="mt-2 bg-white/95 rounded-xl p-3 text-xs space-y-1 max-h-64 overflow-y-auto" style={{ color: SUB }}>
-            {MOCK_USERS.map((u) => (
+            {MOCK_USERS.filter((u) => u.role !== "judge").map((u) => (
               <div key={u.empId} className="flex justify-between">
                 <span>{u.name} <span className="opacity-60">({ROLE_LABEL[u.role]})</span></span>
                 <span className="font-mono">{u.empId}</span>
@@ -1770,6 +2998,56 @@ export default function KaizenApp() {
   const [recalling, setRecalling] = useState(null);
   const [notifications, setNotifications] = useState(() => buildInitialNotifications(kaizens));
   const [showNotifs, setShowNotifs] = useState(false);
+  const [award, setAward] = useState(() => normalizeAward(null));
+  const [awardSync, setAwardSync] = useState("local"); // "local" | "sheet"
+  const awardTimer = useRef(null);
+  const judgeTimers = useRef({});
+
+  const loadAward = () =>
+    fetchAwardFromSheet()
+      .then((res) => {
+        if (res.supported) {
+          setAwardSync("sheet");
+          if (res.award) setAward(normalizeAward(res.award));
+        }
+      })
+      .catch(() => {});
+  useEffect(() => {
+    loadAward();
+  }, []);
+
+  const changeAward = (next) => {
+    setAward(next);
+    if (awardSync === "sheet") {
+      clearTimeout(awardTimer.current);
+      awardTimer.current = setTimeout(() => saveAwardToSheet(next), 1200);
+    }
+  };
+
+  const scoreAward = (judgeId, judgeScores) => {
+    setAward((a) => ({ ...a, scores: { ...a.scores, [judgeId]: judgeScores } }));
+    if (awardSync === "sheet") {
+      clearTimeout(judgeTimers.current[judgeId]);
+      judgeTimers.current[judgeId] = setTimeout(() => saveJudgeScoresToSheet(judgeId, judgeScores), 800);
+    }
+  };
+
+  const sendToJudges = (count) =>
+    activeJudges(award).forEach((j) =>
+      pushNotification(j.userName, `มี Kaizen ${count} เรื่อง รอท่านให้คะแนนใน ${award.roundName} (เมนู "ให้คะแนน")`, null)
+    );
+
+  const judgeSubmitted = (judge) => {
+    pushNotification("Admin", `${judge.userName} ส่งคะแนน ${award.roundName} เรียบร้อยแล้ว`, null);
+    pushNotification("ผอ.โรงงาน", `${judge.userName} ส่งคะแนน ${award.roundName} เรียบร้อยแล้ว`, null);
+  };
+
+  const announceAward = (winners) => {
+    winners.forEach((w) =>
+      pushNotification(w.submittedBy, `🏆 ยินดีด้วย! เรื่อง "${w.title}" ได้รับ${w.tier} ใน ${award.roundName}`, w.id)
+    );
+    pushNotification("Admin", `ผู้อำนวยการยืนยันผล ${award.roundName} แล้ว (${winners.length} รางวัล)`, winners[0]?.id);
+  };
 
   const pushNotification = (recipientName, message, kaizenId) => {
     if (!recipientName) return;
@@ -1895,6 +3173,8 @@ export default function KaizenApp() {
     { key: "supervisor", label: "หัวหน้างาน", icon: ShieldCheck, roles: ["supervisor"] },
     { key: "admin", label: "Admin", icon: ClipboardList, roles: ["admin"] },
     { key: "director", label: "ผู้อำนวยการ", icon: Building2, roles: ["director"] },
+    { key: "award", label: "Kaizen Award", icon: Trophy, roles: ["admin", "director"] },
+    { key: "judge", label: "ให้คะแนน Kaizen Award", icon: Medal, roles: ["judge"] },
   ];
   const NAV = currentUser ? ALL_NAV.filter((n) => n.roles.includes(currentUser.role)) : ALL_NAV;
 
@@ -1923,7 +3203,7 @@ export default function KaizenApp() {
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-white p-1 shadow-sm">
-              <img src={COMPANY_LOGO} alt="Company Logo" className="w-full h-full object-contain" />
+              <img src={COMPANY_LOGO} onError={useLogoFallback} alt="Company Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="text-white font-semibold text-sm leading-tight">Kaizen System</div>
@@ -2161,6 +3441,34 @@ export default function KaizenApp() {
               />
             </div>
           </>
+        )}
+        {tab === "judge" && (
+          <JudgePage
+            kaizens={kaizens}
+            award={award}
+            currentUser={currentUser}
+            onScore={scoreAward}
+            onView={setViewing}
+            onPresent={setPresenting}
+            onSubmitted={judgeSubmitted}
+            onRefresh={loadAward}
+            syncMode={awardSync}
+          />
+        )}
+        {tab === "award" && (
+          <AwardPage
+            kaizens={kaizens}
+            award={award}
+            onChange={changeAward}
+            onScore={scoreAward}
+            onSendToJudges={sendToJudges}
+            onRefresh={loadAward}
+            currentUser={currentUser}
+            onView={setViewing}
+            onPresent={setPresenting}
+            onAnnounce={announceAward}
+            syncMode={awardSync}
+          />
         )}
       </div>
 
