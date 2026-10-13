@@ -556,6 +556,30 @@ function CategoryTags({ categories }) {
   );
 }
 
+// ย่อรูปก่อนอัปโหลด (ด้านยาวสุด 1600px, JPEG) ให้บันทึกเร็วและไม่เปลืองพื้นที่ Google Drive
+function compressImage(file, maxSide = 1600, quality = 0.85) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(reader.result);
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function ImageBox({ label, src, onChange, editable, labelClassName, onZoom, boxClassName }) {
   return (
     <div>
@@ -598,12 +622,22 @@ function ImageBox({ label, src, onChange, editable, labelClassName, onZoom, boxC
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (!f) return;
-                const reader = new FileReader();
-                reader.onload = () => onChange(reader.result);
-                reader.readAsDataURL(f);
+                compressImage(f).then(onChange);
+                e.target.value = "";
               }}
             />
           </label>
+        )}
+        {editable && src && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            title="ลบรูปนี้"
+            className="absolute top-2 right-2 bg-white shadow rounded-full p-1 border"
+            style={{ borderColor: "#D8DDE5" }}
+          >
+            <X size={13} style={{ color: RED }} />
+          </button>
         )}
       </div>
     </div>
@@ -737,7 +771,19 @@ function AttachmentList({ attachments, onAdd, onRemove, editable }) {
   );
 }
 
-function KaizenForm({ initial, onCancel, onSave, currentUser, departments }) {
+// รายการข้อมูลที่ยังขาด (ใช้แจ้งเตือน Admin)
+function missingInfo(k) {
+  const out = [];
+  if (!k.images?.before) out.push("ภาพก่อนปรับปรุง");
+  if (!k.images?.after) out.push("ภาพหลังปรับปรุง");
+  if (!String(k.problem || "").trim()) out.push("ที่มาของปัญหา");
+  if (!String(k.improvement || "").trim()) out.push("แนวทางการปรับปรุง");
+  if (!String(k.result || "").trim()) out.push("ผลที่ได้รับ");
+  if (!(k.categories || []).length) out.push("หมวดหมู่ QCDSME");
+  return out;
+}
+
+function KaizenForm({ initial, onCancel, onSave, currentUser, departments, adminMode }) {
   // เลือกได้เฉพาะหน่วยงานย่อยของผู้ใช้งานที่ล็อกอิน ถ้าไม่มีสิทธิ์เฉพาะ (เช่น Admin) ให้เลือกได้จากทุกหน่วยงาน
   const deptList = currentUser?.departments?.length
     ? currentUser.departments
@@ -755,9 +801,27 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments }) {
     }
   );
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const [adminNote, setAdminNote] = useState("");
+  const missing = adminMode ? missingInfo(f) : [];
 
   return (
     <div className="space-y-4">
+      {adminMode && (
+        <div className="rounded-xl border p-3.5" style={{ background: "#FDF3E1", borderColor: "#E8C77E" }}>
+          <div className="text-sm font-semibold" style={{ color: "#6B4A10" }}>แก้ไขข้อมูลในฐานะ Admin · {initial?.registeredNo}</div>
+          <div className="text-xs mt-1" style={{ color: "#6B4A10" }}>
+            สถานะเดิม <strong>{STATUS_META[initial?.status]?.label || initial?.status}</strong> จะไม่เปลี่ยน · ระบบบันทึกการแก้ไขไว้ในประวัติการดำเนินเรื่องอัตโนมัติ
+          </div>
+          {missing.length > 0 && (
+            <div className="text-xs mt-2 flex flex-wrap gap-1.5 items-center" style={{ color: "#8B2E24" }}>
+              <AlertTriangle size={13} /> ข้อมูลที่ยังขาด:
+              {missing.map((m) => (
+                <span key={m} className="px-2 py-0.5 rounded-full" style={{ background: "#FBEAE8" }}>{m}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <Field label="หัวเรื่อง / ชื่อโครงการ" required>
           <TextInput value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="เช่น รถเข็นเครื่องชั่งดิจิตอลแบบตั้งโต๊ะ" />
@@ -807,6 +871,58 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments }) {
         onAdd={(file) => set("attachments", [...(f.attachments || []), file])}
         onRemove={(id) => set("attachments", (f.attachments || []).filter((a) => a.id !== id))}
       />
+      {adminMode && (
+        <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "#E3E7ED", background: "#FAFBFC" }}>
+          <div className="text-sm font-semibold" style={{ color: INK }}>ข้อมูลจัดหมวดหมู่ (Admin)</div>
+          <div>
+            <div className="text-xs mb-1.5 font-medium" style={{ color: SUB }}>หมวดหมู่ QCDSME</div>
+            <div className="flex flex-wrap gap-1.5">
+              {CATEGORY_OPTIONS.map((c) => {
+                const on = (f.categories || []).includes(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => set("categories", on ? f.categories.filter((x) => x !== c) : [...(f.categories || []), c])}
+                    className="text-xs px-2.5 py-1 rounded-full border"
+                    style={on ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: SUB, background: "white" }}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="ประเภทกิจกรรม">
+              <select className={inputCls} style={inputStyle} value={f.activityType || "Kaizen"} onChange={(e) => set("activityType", e.target.value)}>
+                {ACTIVITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </Field>
+            <Field label="ประเภท Kaizen">
+              <select className={inputCls} style={inputStyle} value={f.kaizenType || "Kaizen Project"} onChange={(e) => set("kaizenType", e.target.value)}>
+                {KAIZEN_TYPE_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="หมายเหตุการแก้ไข (บันทึกในประวัติ ไม่บังคับ)">
+            <TextInput value={adminNote} onChange={(e) => setAdminNote(e.target.value)} placeholder="เช่น เพิ่มรูปก่อน-หลังตามที่หน่วยงานส่งมาทางไลน์" />
+          </Field>
+        </div>
+      )}
+      {adminMode ? (
+        <div className="flex justify-end gap-2 pt-2">
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+          <button
+            disabled={!f.title}
+            onClick={() => onSave(f, adminNote)}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40 flex items-center gap-1.5"
+            style={{ background: NAVY }}
+          >
+            <CheckCircle2 size={15} /> บันทึกการแก้ไข
+          </button>
+        </div>
+      ) : (
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
         <button
@@ -825,6 +941,7 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments }) {
           ส่งเรื่อง
         </button>
       </div>
+      )}
     </div>
   );
 }
@@ -925,12 +1042,13 @@ function Timeline({ history }) {
           h.action === "approve" ? "อนุมัติ" :
           h.action === "reject" ? "ตีกลับ (ถึงพนักงาน)" :
           h.action === "return" ? `ส่งกลับไปยัง ${TARGET_LABEL[h.target] || h.target}` :
-          h.action === "recall" ? "ถอนเรื่องกลับมาแก้ไข (แบบร่าง)" : "";
+          h.action === "recall" ? "ถอนเรื่องกลับมาแก้ไข (แบบร่าง)" :
+          h.action === "edit" ? "แก้ไขข้อมูลโดย Admin" : "";
         const [datePart, timePart] = (h.date || "").split(" ");
         return (
           <div key={i} className="flex gap-3">
             <div className="flex flex-col items-center">
-              <div className="w-2.5 h-2.5 rounded-full mt-1" style={{ background: isNegative ? RED : GREEN }} />
+              <div className="w-2.5 h-2.5 rounded-full mt-1" style={{ background: isNegative ? RED : h.action === "edit" ? GOLD : GREEN }} />
               {i !== history.length - 1 && <div className="w-px flex-1" style={{ background: "#E2E6EB" }} />}
             </div>
             <div className="pb-3">
@@ -1144,7 +1262,7 @@ function PresentationView({ k }) {
   );
 }
 
-function Table({ rows, actions }) {
+function Table({ rows, actions, showMissing }) {
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: "#E2E6EB" }}>
       <table className="w-full text-sm">
@@ -1174,6 +1292,11 @@ function Table({ rows, actions }) {
                     </span>
                   )}
                 </div>
+                {showMissing && (!k.images?.before || !k.images?.after) && (
+                  <span className="inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded-full font-normal" style={{ background: "#FBEAE8", color: "#8B2E24" }}>
+                    <ImageOff size={10} /> {!k.images?.before && !k.images?.after ? "ยังไม่มีรูปก่อน-หลัง" : !k.images?.before ? "ยังไม่มีรูปก่อน" : "ยังไม่มีรูปหลัง"}
+                  </span>
+                )}
               </td>
               <td className="px-4 py-3" style={{ color: SUB }}>{k.department}</td>
               <td className="px-4 py-3"><CategoryTags categories={k.categories} /></td>
@@ -3000,6 +3123,9 @@ export default function KaizenApp() {
   const [reviewing, setReviewing] = useState(null);
   const [presenting, setPresenting] = useState(null);
   const [showDeptManager, setShowDeptManager] = useState(false);
+  const [adminEditing, setAdminEditing] = useState(null);
+  const [adminListFilter, setAdminListFilter] = useState("all"); // all | noimage | incomplete
+  const [adminSearch, setAdminSearch] = useState("");
   const [recalling, setRecalling] = useState(null);
   const [notifications, setNotifications] = useState(() => buildInitialNotifications(kaizens));
   const [showNotifs, setShowNotifs] = useState(false);
@@ -3108,6 +3234,38 @@ export default function KaizenApp() {
     }
     setShowForm(false);
     setEditing(null);
+  };
+
+  // Admin แก้ไขข้อมูล Kaizen ได้ทุกสถานะ (รวมเรื่องที่อนุมัติแล้ว) โดยไม่เปลี่ยนสถานะ และบันทึกประวัติการแก้ไข
+  const EDIT_LABELS = {
+    title: "หัวเรื่อง", team: "ชื่อทีม", department: "หน่วยงาน", problem: "ที่มาของปัญหา", improvement: "แนวทางการปรับปรุง",
+    budget: "งบประมาณ", result: "ผลที่ได้รับ", costSaving: "Cost Saving", costSavingCalc: "วิธีคำนวณ", members: "สมาชิกทีม",
+    categories: "หมวดหมู่", activityType: "ประเภทกิจกรรม", kaizenType: "ประเภท Kaizen", attachments: "ไฟล์แนบ",
+  };
+  const adminSave = (formData, note) => {
+    const original = adminEditing;
+    if (!original) return;
+    const changed = Object.keys(EDIT_LABELS).filter((key) => JSON.stringify(original[key] ?? "") !== JSON.stringify(formData[key] ?? ""));
+    if ((original.images?.before || null) !== (formData.images?.before || null)) changed.push(formData.images?.before ? "ภาพก่อนปรับปรุง" : "ลบภาพก่อนปรับปรุง");
+    if ((original.images?.after || null) !== (formData.images?.after || null)) changed.push(formData.images?.after ? "ภาพหลังปรับปรุง" : "ลบภาพหลังปรับปรุง");
+    if (!changed.length && !note) {
+      setAdminEditing(null);
+      return;
+    }
+    const comment = [changed.length ? `แก้ไข: ${changed.map((c) => EDIT_LABELS[c] || c).join(", ")}` : "", note].filter(Boolean).join(" · ");
+    const updatedRecord = {
+      ...original,
+      ...formData,
+      id: original.id,
+      registeredNo: original.registeredNo,
+      date: original.date,
+      submittedBy: original.submittedBy,
+      status: original.status,
+      history: [...(original.history || []), { stage: "แก้ไขข้อมูล", actor: currentUser.name, action: "edit", comment, date: nowStamp() }],
+    };
+    updateKaizen(original.id, updatedRecord);
+    syncKaizenToSheet("update", updatedRecord);
+    setAdminEditing(null);
   };
 
   const decide = (k, action, comment, extra, returnTo) => {
@@ -3405,17 +3563,50 @@ export default function KaizenApp() {
               actions={(k) => (
                 <>
                   <IconBtn icon={Presentation} label="นำเสนอ" onClick={() => setPresenting(k)} color={NAVY} />
+                  <IconBtn icon={Pencil} label="แก้ไขข้อมูล / เพิ่มรูป" onClick={() => setAdminEditing(k)} color="#6A4BC9" />
                   <IconBtn icon={ClipboardList} label="ตรวจ/จัดหมวด" onClick={() => setReviewing(k)} color={GREEN} filled />
                 </>
               )}
             />
-            <div className="mt-6 text-sm font-medium" style={{ color: INK }}>รายการทั้งหมดในระบบ</div>
+            <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-sm font-medium" style={{ color: INK }}>รายการทั้งหมดในระบบ</div>
+              <input
+                value={adminSearch}
+                onChange={(e) => setAdminSearch(e.target.value)}
+                placeholder="ค้นหาเลขที่ / เรื่อง / หน่วยงาน"
+                className="rounded-lg border px-3 py-1.5 text-sm w-72"
+                style={inputStyle}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[
+                ["all", `ทั้งหมด (${kaizens.length})`],
+                ["noimage", `ยังไม่มีรูปก่อน-หลัง (${kaizens.filter((k) => !k.images?.before || !k.images?.after).length})`],
+                ["incomplete", `ข้อมูลยังไม่ครบ (${kaizens.filter((k) => missingInfo(k).length > 0).length})`],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setAdminListFilter(key)}
+                  className="text-xs px-3 py-1.5 rounded-full border font-medium"
+                  style={adminListFilter === key ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: SUB, background: "white" }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="mt-2">
               <Table
-                rows={kaizens}
+                showMissing
+                rows={kaizens.filter((k) => {
+                  if (adminListFilter === "noimage" && k.images?.before && k.images?.after) return false;
+                  if (adminListFilter === "incomplete" && missingInfo(k).length === 0) return false;
+                  const q = adminSearch.trim().toLowerCase();
+                  return !q || [k.registeredNo, k.title, k.department].some((v) => String(v || "").toLowerCase().includes(q));
+                })}
                 actions={(k) => (
                   <>
                     <IconBtn icon={Eye} label="ดู" onClick={() => setViewing(k)} color={NAVY} />
+                    <IconBtn icon={Pencil} label="แก้ไขข้อมูล / เพิ่มรูป" onClick={() => setAdminEditing(k)} color="#6A4BC9" />
                     <IconBtn icon={Presentation} label="นำเสนอ" onClick={() => setPresenting(k)} color={GOLD} />
                   </>
                 )}
@@ -3490,8 +3681,37 @@ export default function KaizenApp() {
       )}
 
       {viewing && (
-        <Modal title="รายละเอียด Kaizen" onClose={() => setViewing(null)} wide>
+        <Modal
+          title="รายละเอียด Kaizen"
+          onClose={() => setViewing(null)}
+          wide
+          headerExtra={
+            currentUser?.role === "admin" && (
+              <button
+                onClick={() => { setAdminEditing(viewing); setViewing(null); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+                style={{ background: "#6A4BC9" }}
+              >
+                <Pencil size={13} /> แก้ไขข้อมูล / เพิ่มรูป
+              </button>
+            )
+          }
+        >
           <DetailView k={viewing} />
+        </Modal>
+      )}
+
+      {adminEditing && (
+        <Modal title="แก้ไขข้อมูล Kaizen (Admin)" onClose={() => setAdminEditing(null)} wide>
+          <KaizenForm
+            key={adminEditing.id}
+            initial={adminEditing}
+            adminMode
+            currentUser={currentUser}
+            departments={departments}
+            onCancel={() => setAdminEditing(null)}
+            onSave={adminSave}
+          />
         </Modal>
       )}
 
