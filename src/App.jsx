@@ -1,14 +1,14 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, createContext, useContext } from "react";
 import {
   LayoutDashboard, User, ShieldCheck, Building2, PlusCircle, Eye, Pencil,
   CheckCircle2, XCircle, Upload, X, Filter, ClipboardList, Presentation,
   Users, TrendingUp, ChevronRight, ImageOff, LogOut, Lock, KeyRound, AlertTriangle, Clock,
   Download, Coins, Bell, BellRing, Undo2, Paperclip, FileVideo, FileSpreadsheet, FileText, ZoomIn,
-  Trophy, Medal, Plus, Trash2
+  Trophy, Medal, Plus, Trash2, Star, ImagePlus, Printer, ChevronLeft, ChevronDown, Search
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
-  CartesianGrid, LineChart, Line, Legend
+  CartesianGrid, LineChart, Line, Legend, LabelList
 } from "recharts";
 import * as XLSX from "xlsx";
 
@@ -49,7 +49,7 @@ async function syncKaizenToSheet(action, record) {
       method: "POST",
       // ใช้ text/plain เพื่อเลี่ยงปัญหา CORS preflight ของ Google Apps Script (ข้อจำกัดที่รู้กันของ Apps Script)
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, record }),
+      body: JSON.stringify({ action, record: toSheetRecord(record) }),
     });
   } catch (err) {
     // คาดว่าจะ error ถ้าทดสอบอยู่ใน claude.ai artifact (ถูกบล็อกโดย sandbox)
@@ -174,7 +174,7 @@ const MOCK_USERS = [
   { name: "กรรมการ 5", empId: "3005", role: "judge", departments: [] },
 
   { name: "ทิพวรรณ บุญจิตติ", empId: "2001", role: "supervisor", departments: ["Production Planning & Data"] },
-  { name: "ธัญญธรณ์ สุขุมาลพันธ์", empId: "2002", role: "supervisor", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1", "Thread forming 3", "Packing 3"] },
+  { name: "ธัญยธรณ์ สุขุมาลพันธ์", empId: "2002", role: "supervisor", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1", "Thread forming 3", "Packing 3"] },
   { name: "ธันวา ปักษาสุข", empId: "2005", role: "supervisor", departments: ["Drying 2", "Packing 2", "RTE"] },
   { name: "ศศิธร สระทองพูล", empId: "2010", role: "supervisor", departments: ["Thread forming _ RN", "Thread forming _ RV", "Cutting", "Drying 4", "Packing 4", "BS"] },
   { name: "อมรรัตน์ ตุลาผล", empId: "2016", role: "supervisor", departments: ["QC", "QA", "Pest Control", "DC", "Sanitation", "Lab"] },
@@ -326,7 +326,7 @@ function seedData() {
       status: "approved",
       history: [
         { stage: "ส่งเรื่อง", actor: "Production_Line 1", action: "submit", comment: "", date: "2026-08-02 09:10" },
-        { stage: "หัวหน้างาน", actor: "ธัญญธรณ์ สุขุมาลพันธ์", action: "approve", comment: "เห็นด้วย ช่วยลดความเสี่ยงจริง", date: "2026-08-04 10:45" },
+        { stage: "หัวหน้างาน", actor: "ธัญยธรณ์ สุขุมาลพันธ์", action: "approve", comment: "เห็นด้วย ช่วยลดความเสี่ยงจริง", date: "2026-08-04 10:45" },
         { stage: "Admin", actor: "Admin", action: "approve", comment: "จัดหมวด Safety ตรวจครบถ้วน", date: "2026-08-06 13:20" },
         { stage: "ผู้อำนวยการ", actor: "ผอ.โรงงาน", action: "approve", comment: "อนุมัติ ให้ขยายผลไปไลน์อื่น", date: "2026-08-10 14:05" },
       ],
@@ -532,6 +532,282 @@ function seedData() {
   ];
 }
 
+// ================= ตัวช่วยกลาง: รูปหลายภาพ · ชื่อ · ดาว Kaizen Award · ตัวกรอง Multi Select =================
+const MAX_PHOTOS = 10;
+
+const asList = (v) => {
+  if (Array.isArray(v)) return v.filter(Boolean);
+  if (!v) return [];
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try {
+      const p = JSON.parse(v);
+      return Array.isArray(p) ? p.filter(Boolean) : [];
+    } catch (e) {
+      return [v];
+    }
+  }
+  return [v];
+};
+
+// ชื่อที่ถูกแก้ไข (แสดงชื่อใหม่ในประวัติเดิมด้วย)
+const NAME_FIX = { "ธัญญธรณ์ สุขุมาลพันธ์": "ธัญยธรณ์ สุขุมาลพันธ์" };
+const fixName = (n) => NAME_FIX[n] || n;
+
+function normalizeKaizen(k) {
+  const history = Array.isArray(k.history) ? k.history : [];
+  return {
+    ...k,
+    images: { before: asList(k.images?.before), after: asList(k.images?.after) },
+    categories: Array.isArray(k.categories) ? k.categories : [],
+    attachments: Array.isArray(k.attachments) ? k.attachments : [],
+    members: Array.isArray(k.members) ? k.members : [],
+    history: history.map((h) => ({ ...h, actor: fixName(h.actor) })),
+    activityType: k.activityType || "Kaizen",
+    kaizenType: k.kaizenType || "Kaizen Project",
+  };
+}
+
+// รูป 1 ใบส่งเป็นลิงก์ตรงๆ (ใช้ได้กับ Code.gs เดิม) หลายใบส่งเป็นรายการ (ต้องใช้ Code.gs ที่อัปเดตแล้ว)
+function toSheetRecord(record) {
+  const out = (v) => {
+    const l = asList(v);
+    return l.length === 0 ? null : l.length === 1 ? l[0] : l;
+  };
+  return { ...record, images: { before: out(record.images?.before), after: out(record.images?.after) } };
+}
+
+// Kaizen ที่นับเป็น "ยอดการส่ง Kaizen": หัวหน้างานอนุมัติแล้ว และประเภทกิจกรรม = Kaizen (ไม่นับ Suggestion)
+const SUPERVISOR_APPROVED = ["pending_admin", "pending_director", "approved"];
+const isCountedKaizen = (k) => SUPERVISOR_APPROVED.includes(k.status) && (k.activityType || "Kaizen") === "Kaizen";
+
+// สิทธิ์แก้ไขข้อมูล: Admin แก้ได้ทุกเรื่อง · หัวหน้างานแก้ได้ทุกเรื่องที่หน่วยงานตัวเองส่งเข้ามา (ที่ไม่ใช่แบบร่าง)
+const canEditKaizen = (user, k) =>
+  !!user && !!k && (user.role === "admin" || (user.role === "supervisor" && k.status !== "draft" && (user.departments || []).includes(k.department)));
+
+// เก็บค่าไว้ในแท็บเบราว์เซอร์ (รีเฟรชแล้วอยู่หน้าเดิม ปิดแท็บแล้วหายเอง เหมาะกับเครื่องที่ใช้ร่วมกัน)
+function useStoredState(key, initial) {
+  const [v, setV] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw === null ? initial : JSON.parse(raw);
+    } catch (e) {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(v));
+    } catch (e) {}
+  }, [key, v]);
+  return [v, setV];
+}
+
+const AwardCtx = createContext(null);
+
+function ActivityHelp({ className = "", light }) {
+  return (
+    <div className={`text-[11px] leading-relaxed ${className}`} style={{ color: light ? "rgba(255,255,255,0.62)" : "#A3ABB8" }}>
+      <span className="font-medium">Kaizen</span> – คือการปรับปรุงงานที่ได้ลงมือทำแล้ว , <span className="font-medium">Suggestion</span> – เป็นแค่ความคิดเห็น ไอเดีย ยังไม่ลงมือทำ
+    </div>
+  );
+}
+
+// ---------- ดาวตามเกณฑ์ Kaizen Award ----------
+function starLevel(k, award) {
+  const cfg = award || DEFAULT_AWARD;
+  const pct = prescreen(k, cfg);
+  const t = cfg.starThresholds || DEFAULT_AWARD.starThresholds;
+  const n = pct >= t[0] ? 5 : pct >= t[1] ? 4 : pct >= t[2] ? 3 : pct >= t[3] ? 2 : pct > 0 ? 1 : 0;
+  return { pct, n };
+}
+
+function StarRating({ k, size = 13, showPct = false, className = "" }) {
+  const award = useContext(AwardCtx);
+  const { pct, n } = starLevel(k, award);
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 ${className}`}
+      title={`ระดับ ${n}/5 ดาว · คะแนนประเมินตามเกณฑ์ Kaizen Award ${pct}% (Cost Saving, ผลกระทบ, ROI, ทีมงาน)`}
+    >
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star key={i} size={size} fill={i <= n ? GOLD : "none"} style={{ color: i <= n ? GOLD : "#CBD2DC" }} />
+      ))}
+      {showPct && <span className="ml-1 text-[11px]" style={{ color: SUB }}>{pct}%</span>}
+    </span>
+  );
+}
+
+function AwardLevelCard({ k }) {
+  const award = useContext(AwardCtx) || DEFAULT_AWARD;
+  const { pct, n } = starLevel(k, award);
+  const autoCrit = award.criteria.filter((c) => c.type === "auto");
+  const winner = award.decision?.winners?.find((w) => w.id === k.id);
+  return (
+    <div className="rounded-xl border p-4" style={{ borderColor: "#E8D9B5", background: "#FFFBF2" }}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <StarRating k={k} size={20} />
+          <div>
+            <div className="text-sm font-semibold" style={{ color: INK }}>ระดับตามเกณฑ์ Kaizen Award: {n} / 5 ดาว</div>
+            <div className="text-[11px]" style={{ color: SUB }}>คะแนนประเมินเบื้องต้น {pct}% จากเกณฑ์ที่ระบบคำนวณให้อัตโนมัติ (ยังไม่รวมคะแนนของกรรมการ)</div>
+          </div>
+        </div>
+        {winner && (
+          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "#FDF3E1", color: "#B07D1A", border: "1px solid #E8C77E" }}>
+            <Trophy size={13} /> {winner.tier}
+          </span>
+        )}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5">
+        {autoCrit.map((c) => (
+          <div key={c.id} className="flex items-center justify-between gap-2 text-xs">
+            <span style={{ color: SUB }}>{c.name} <span style={{ color: "#A3ABB8" }}>({c.weight}%)</span></span>
+            <span className="font-medium whitespace-nowrap" style={{ color: INK }}>
+              {autoScore(c.source, k, award)}/5 <span style={{ color: "#A3ABB8" }}>· {autoReason(c.source, k)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      {!(k.categories || []).length && (
+        <div className="text-[11px] mt-2" style={{ color: "#A3ABB8" }}>* ยังไม่ได้จัดหมวดหมู่ QCDSME คะแนนด้านผลกระทบอาจเพิ่มขึ้นหลัง Admin จัดหมวดหมู่</div>
+      )}
+    </div>
+  );
+}
+
+// ---------- ตัวกรอง Multi Select (ใช้กับตารางของทุกบทบาท และ Dashboard) ----------
+function MultiSelectFilter({ label, options, selected, onSelected, query, onQuery, dark, align = "left" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  const q = (query || "").trim().toLowerCase();
+  const shown = options.filter((o) => !q || o.label.toLowerCase().includes(q));
+  const active = selected.length > 0 || !!q;
+  const toggle = (v) => onSelected(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  const allShown = shown.length > 0 && shown.every((o) => selected.includes(o.value));
+  const btnStyle = dark
+    ? { background: active ? "#FFFFFF" : "rgba(255,255,255,0.12)", color: active ? DB_DEEP : "white", borderColor: "rgba(255,255,255,0.35)" }
+    : { background: active ? "#EAF3FC" : "white", color: active ? DB_BLUE : SUB, borderColor: active ? DB_BLUE : "#D8DDE5" };
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap" style={btnStyle}>
+        {label}
+        {selected.length > 0 && (
+          <span className="min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ background: DB_BLUE }}>{selected.length}</span>
+        )}
+        {q && selected.length === 0 && <Search size={11} />}
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div className="absolute z-40 mt-1 w-72 rounded-xl border bg-white shadow-xl p-2" style={{ borderColor: "#D8DDE5", [align]: 0 }}>
+          <input
+            autoFocus
+            value={query || ""}
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder={`ค้นหา ${label}...`}
+            className="w-full rounded-lg border px-2.5 py-1.5 text-xs mb-1.5 outline-none"
+            style={{ borderColor: "#D8DDE5", color: INK }}
+          />
+          <div className="flex items-center justify-between px-1 pb-1 text-[11px]" style={{ color: SUB }}>
+            <button
+              type="button"
+              className="underline"
+              onClick={() =>
+                onSelected(allShown ? selected.filter((v) => !shown.some((o) => o.value === v)) : Array.from(new Set([...selected, ...shown.map((o) => o.value)])))
+              }
+            >
+              {allShown ? "ยกเลิกที่แสดงอยู่ทั้งหมด" : "เลือกที่แสดงอยู่ทั้งหมด"}
+            </button>
+            <button type="button" className="underline" onClick={() => { onSelected([]); onQuery(""); }}>ล้าง</button>
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {shown.length === 0 && <div className="text-xs py-3 text-center" style={{ color: SUB }}>ไม่พบรายการ</div>}
+            {shown.map((o) => (
+              <label key={o.value} className="flex items-start gap-2 px-1.5 py-1 rounded hover:bg-slate-50 cursor-pointer text-xs" style={{ color: INK }}>
+                <input type="checkbox" className="mt-0.5" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
+                <span>{o.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const EMPTY_FILTERS = {
+  no: { q: "", sel: [] }, title: { q: "", sel: [] }, dept: { q: "", sel: [] }, cat: { q: "", sel: [] }, status: { q: "", sel: [] },
+};
+
+function useKaizenFilters(rows) {
+  const [f, setF] = useState(EMPTY_FILTERS);
+  const part = (key) => ({
+    selected: f[key].sel,
+    query: f[key].q,
+    onSelected: (sel) => setF((s) => ({ ...s, [key]: { ...s[key], sel } })),
+    onQuery: (q) => setF((s) => ({ ...s, [key]: { ...s[key], q } })),
+  });
+  const textOk = (q, text) => !q.trim() || String(text).toLowerCase().includes(q.trim().toLowerCase());
+  const filtered = useMemo(
+    () =>
+      rows.filter((k) => {
+        const cats = k.categories || [];
+        if (!textOk(f.no.q, `${k.registeredNo} ${k.date}`)) return false;
+        if (f.no.sel.length && !f.no.sel.includes(k.registeredNo)) return false;
+        if (!textOk(f.title.q, k.title)) return false;
+        if (f.title.sel.length && !f.title.sel.includes(k.title)) return false;
+        if (!textOk(f.dept.q, k.department)) return false;
+        if (f.dept.sel.length && !f.dept.sel.includes(k.department)) return false;
+        if (f.cat.sel.length && !f.cat.sel.some((c) => (c === "__none" ? cats.length === 0 : cats.includes(c)))) return false;
+        if (!textOk(f.cat.q, cats.join(" "))) return false;
+        if (f.status.sel.length && !f.status.sel.includes(k.status)) return false;
+        return true;
+      }),
+    [rows, f]
+  );
+  const options = useMemo(
+    () => ({
+      no: [...rows].sort((a, b) => String(b.registeredNo).localeCompare(String(a.registeredNo))).map((k) => ({ value: k.registeredNo, label: `${k.registeredNo} · ${k.date}` })),
+      title: Array.from(new Set(rows.map((k) => k.title))).sort().map((t) => ({ value: t, label: t })),
+      dept: Array.from(new Set(rows.map((k) => k.department))).sort().map((d) => ({ value: d, label: d })),
+      cat: [...CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })), { value: "__none", label: "ยังไม่จัดหมวด" }],
+      status: Object.entries(STATUS_META).map(([key, v]) => ({ value: key, label: v.label })),
+    }),
+    [rows]
+  );
+  const active = Object.values(f).some((p) => p.q.trim() || p.sel.length);
+  return { part, filtered, options, active, clear: () => setF(EMPTY_FILTERS) };
+}
+
+function RowFilterBar({ flt, total, dark }) {
+  const items = [
+    ["no", "เลขที่ / วันที่", "left"], ["title", "เรื่อง", "left"], ["dept", "หน่วยงาน", "left"], ["cat", "หมวดหมู่", "right"], ["status", "สถานะ", "right"],
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-1.5 text-xs font-medium pr-1" style={{ color: dark ? "rgba(255,255,255,0.9)" : SUB }}>
+        <Search size={13} /> ค้นหา / กรอง
+      </div>
+      {items.map(([key, label, align]) => (
+        <MultiSelectFilter key={key} label={label} options={flt.options[key]} dark={dark} align={align} {...flt.part(key)} />
+      ))}
+      {flt.active && (
+        <button type="button" onClick={flt.clear} className="text-xs underline px-1" style={{ color: dark ? "white" : DB_BLUE }}>ล้างตัวกรอง</button>
+      )}
+      <span className="ml-auto text-[11px]" style={{ color: dark ? "rgba(255,255,255,0.7)" : SUB }}>
+        แสดง {flt.filtered.length} จาก {total} รายการ
+      </span>
+    </div>
+  );
+}
+
 function StatusBadge({ status }) {
   const m = STATUS_META[status];
   return (
@@ -640,6 +916,115 @@ function ImageBox({ label, src, onChange, editable, labelClassName, onZoom, boxC
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+
+// ---------- รูปหลายภาพ (Before / After ได้สูงสุด 10 รูปต่อด้าน) ----------
+function PhotoGallery({ label, photos, onChange, editable, onZoom }) {
+  const list = asList(photos);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const addFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const room = MAX_PHOTOS - list.length;
+    const take = files.slice(0, Math.max(0, room));
+    setNotice(files.length > room ? `เพิ่มได้สูงสุด ${MAX_PHOTOS} รูปต่อด้าน ระบบรับเพิ่มให้ ${take.length} รูป` : "");
+    if (!take.length) return;
+    setBusy(true);
+    const out = await Promise.all(take.map((f) => compressImage(f, 1280, 0.8)));
+    setBusy(false);
+    onChange([...list, ...out]);
+  };
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-xs font-medium" style={{ color: SUB }}>{label}</div>
+        <span className="text-[11px]" style={{ color: list.length >= MAX_PHOTOS ? RED : "#A3ABB8" }}>{list.length}/{MAX_PHOTOS} รูป</span>
+      </div>
+      {list.length === 0 && !editable ? (
+        <div className="rounded-lg border h-36 flex flex-col items-center justify-center gap-1" style={{ borderColor: "#D8DDE5", background: "#FAFBFC", color: "#AEB6C2" }}>
+          <ImageOff size={22} />
+          <span className="text-[11px]">ไม่มีรูปภาพ</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {list.map((src, i) => (
+            <div key={i} className="relative group rounded-lg overflow-hidden border aspect-[4/3]" style={{ borderColor: "#D8DDE5", background: "#FAFBFC" }}>
+              <img
+                src={src}
+                alt={`${label} ${i + 1}`}
+                className="w-full h-full object-cover"
+                style={onZoom ? { cursor: "zoom-in" } : undefined}
+                onClick={onZoom ? () => onZoom(list, i) : undefined}
+              />
+              {editable && (
+                <button
+                  type="button"
+                  onClick={() => onChange(list.filter((_, j) => j !== i))}
+                  title="ลบรูปนี้"
+                  className="absolute top-1 right-1 bg-white shadow rounded-full p-0.5 border"
+                  style={{ borderColor: "#D8DDE5" }}
+                >
+                  <X size={12} style={{ color: RED }} />
+                </button>
+              )}
+            </div>
+          ))}
+          {editable && list.length < MAX_PHOTOS && (
+            <label className="aspect-[4/3] rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-0.5 cursor-pointer hover:bg-slate-50" style={{ borderColor: "#C9D2DE", color: NAVY }}>
+              <ImagePlus size={20} />
+              <span className="text-[11px] font-medium">เพิ่มรูป</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
+      )}
+      {busy && <div className="text-[11px] mt-1" style={{ color: SUB }}>กำลังย่อขนาดรูป...</div>}
+      {notice && <div className="text-[11px] mt-1" style={{ color: RED }}>{notice}</div>}
+    </div>
+  );
+}
+
+// แสดงรูปแบบตารางสำหรับโปสเตอร์นำเสนอ (1 รูป = ใหญ่เต็มกรอบ หลายรูป = จัดเป็นตาราง)
+function PhotoGrid({ label, photos, onZoom }) {
+  const list = asList(photos);
+  const n = list.length;
+  const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4;
+  return (
+    <div>
+      <div className="text-xs font-medium mb-1.5" style={{ color: INK }}>{label}{n > 1 ? ` (${n} รูป)` : ""}</div>
+      {n === 0 ? (
+        <div className="rounded-lg border h-56 flex flex-col items-center justify-center gap-1" style={{ borderColor: "#D8DDE5", background: "#FAFBFC", color: "#AEB6C2" }}>
+          <ImageOff size={22} />
+          <span className="text-[11px]">ไม่มีรูปภาพ</span>
+        </div>
+      ) : (
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+          {list.map((src, i) => (
+            <div key={i} className={`rounded-lg overflow-hidden border ${n === 1 ? "h-56" : "aspect-[4/3]"}`} style={{ borderColor: "#D8DDE5", background: "#FAFBFC" }}>
+              <img
+                src={src}
+                alt={`${label} ${i + 1}`}
+                className="w-full h-full object-cover"
+                style={onZoom ? { cursor: "zoom-in" } : undefined}
+                onClick={onZoom ? () => onZoom(list, i) : undefined}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -774,8 +1159,8 @@ function AttachmentList({ attachments, onAdd, onRemove, editable }) {
 // รายการข้อมูลที่ยังขาด (ใช้แจ้งเตือน Admin)
 function missingInfo(k) {
   const out = [];
-  if (!k.images?.before) out.push("ภาพก่อนปรับปรุง");
-  if (!k.images?.after) out.push("ภาพหลังปรับปรุง");
+  if (asList(k.images?.before).length === 0) out.push("ภาพก่อนปรับปรุง");
+  if (asList(k.images?.after).length === 0) out.push("ภาพหลังปรับปรุง");
   if (!String(k.problem || "").trim()) out.push("ที่มาของปัญหา");
   if (!String(k.improvement || "").trim()) out.push("แนวทางการปรับปรุง");
   if (!String(k.result || "").trim()) out.push("ผลที่ได้รับ");
@@ -783,7 +1168,7 @@ function missingInfo(k) {
   return out;
 }
 
-function KaizenForm({ initial, onCancel, onSave, currentUser, departments, adminMode }) {
+function KaizenForm({ initial, onCancel, onSave, currentUser, departments, adminMode, editorLabel = "Admin" }) {
   // เลือกได้เฉพาะหน่วยงานย่อยของผู้ใช้งานที่ล็อกอิน ถ้าไม่มีสิทธิ์เฉพาะ (เช่น Admin) ให้เลือกได้จากทุกหน่วยงาน
   const deptList = currentUser?.departments?.length
     ? currentUser.departments
@@ -796,7 +1181,8 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
       problem: "", improvement: "", budget: "", result: "",
       costSaving: "", costSavingCalc: "",
       members: emptyMembers(),
-      images: { before: null, after: null },
+      images: { before: [], after: [] },
+      activityType: "Kaizen",
       attachments: [],
     }
   );
@@ -808,7 +1194,7 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
     <div className="space-y-4">
       {adminMode && (
         <div className="rounded-xl border p-3.5" style={{ background: "#FDF3E1", borderColor: "#E8C77E" }}>
-          <div className="text-sm font-semibold" style={{ color: "#6B4A10" }}>แก้ไขข้อมูลในฐานะ Admin · {initial?.registeredNo}</div>
+          <div className="text-sm font-semibold" style={{ color: "#6B4A10" }}>แก้ไขข้อมูลในฐานะ {editorLabel} · {initial?.registeredNo}</div>
           <div className="text-xs mt-1" style={{ color: "#6B4A10" }}>
             สถานะเดิม <strong>{STATUS_META[initial?.status]?.label || initial?.status}</strong> จะไม่เปลี่ยน · ระบบบันทึกการแก้ไขไว้ในประวัติการดำเนินเรื่องอัตโนมัติ
           </div>
@@ -838,6 +1224,16 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
           <TextInput disabled={!!currentUser} style={{ opacity: currentUser ? 0.7 : 1 }} value={f.submittedBy} onChange={(e) => set("submittedBy", e.target.value)} placeholder="ชื่อ นามสกุล" />
         </Field>
       </div>
+      {!adminMode && (
+        <div>
+          <Field label="ประเภทกิจกรรม" required>
+            <select className={inputCls} style={inputStyle} value={f.activityType || "Kaizen"} onChange={(e) => set("activityType", e.target.value)}>
+              {ACTIVITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+            </select>
+          </Field>
+          <ActivityHelp className="mt-1" />
+        </div>
+      )}
       <MemberTable members={f.members} onChange={(m) => set("members", m)} />
       <Field label="1. ที่มาของปัญหาและสถานการณ์ปัจจุบัน" required>
         <TextArea value={f.problem} onChange={(e) => set("problem", e.target.value)} placeholder="อธิบายปัญหาที่พบก่อนการปรับปรุง" />
@@ -862,8 +1258,8 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <ImageBox label="ภาพก่อนปรับปรุง (Before)" src={f.images.before} editable onChange={(v) => set("images", { ...f.images, before: v })} />
-        <ImageBox label="ภาพหลังปรับปรุง (After)" src={f.images.after} editable onChange={(v) => set("images", { ...f.images, after: v })} />
+        <PhotoGallery label="ภาพก่อนปรับปรุง (Before)" photos={f.images?.before} editable onChange={(v) => set("images", { ...f.images, before: v })} />
+        <PhotoGallery label="ภาพหลังปรับปรุง (After)" photos={f.images?.after} editable onChange={(v) => set("images", { ...f.images, after: v })} />
       </div>
       <AttachmentList
         attachments={f.attachments || []}
@@ -873,7 +1269,7 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
       />
       {adminMode && (
         <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "#E3E7ED", background: "#FAFBFC" }}>
-          <div className="text-sm font-semibold" style={{ color: INK }}>ข้อมูลจัดหมวดหมู่ (Admin)</div>
+          <div className="text-sm font-semibold" style={{ color: INK }}>ข้อมูลจัดหมวดหมู่และประเภท</div>
           <div>
             <div className="text-xs mb-1.5 font-medium" style={{ color: SUB }}>หมวดหมู่ QCDSME</div>
             <div className="flex flex-wrap gap-1.5">
@@ -905,6 +1301,7 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
               </select>
             </Field>
           </div>
+          <ActivityHelp />
           <Field label="หมายเหตุการแก้ไข (บันทึกในประวัติ ไม่บังคับ)">
             <TextInput value={adminNote} onChange={(e) => setAdminNote(e.target.value)} placeholder="เช่น เพิ่มรูปก่อน-หลังตามที่หน่วยงานส่งมาทางไลน์" />
           </Field>
@@ -983,27 +1380,43 @@ function NotificationPanel({ notifications, onItemClick, onMarkAllRead, onClose 
   );
 }
 
-function ImageLightbox({ src, onClose }) {
-  if (!src) return null;
+function ImageLightbox({ photos, index, onClose, onIndex }) {
+  const list = photos || [];
+  const n = list.length;
+  useEffect(() => {
+    if (index == null || !n) return;
+    const h = (e) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight" && n > 1) onIndex((index + 1) % n);
+      if (e.key === "ArrowLeft" && n > 1) onIndex((index - 1 + n) % n);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [index, n]);
+  if (index == null || !n) return null;
+  const nav = (dir) => (e) => {
+    e.stopPropagation();
+    onIndex((index + dir + n) % n);
+  };
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6"
-      style={{ background: "rgba(0,0,0,0.85)" }}
-      onClick={onClose}
-    >
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 p-2 rounded-full"
-        style={{ background: "rgba(255,255,255,0.15)" }}
-      >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,0.85)" }} onClick={onClose}>
+      <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }}>
         <X size={22} className="text-white" />
       </button>
-      <img
-        src={src}
-        alt="ภาพขยาย"
-        className="max-w-full max-h-full rounded-lg shadow-2xl object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
+      {n > 1 && (
+        <>
+          <button onClick={nav(-1)} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} title="รูปก่อนหน้า">
+            <ChevronLeft size={26} className="text-white" />
+          </button>
+          <button onClick={nav(1)} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} title="รูปถัดไป">
+            <ChevronRight size={26} className="text-white" />
+          </button>
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-white text-xs px-3 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.18)" }}>
+            {index + 1} / {n}
+          </div>
+        </>
+      )}
+      <img src={list[index]} alt="ภาพขยาย" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={(e) => e.stopPropagation()} />
     </div>
   );
 }
@@ -1043,7 +1456,7 @@ function Timeline({ history }) {
           h.action === "reject" ? "ตีกลับ (ถึงพนักงาน)" :
           h.action === "return" ? `ส่งกลับไปยัง ${TARGET_LABEL[h.target] || h.target}` :
           h.action === "recall" ? "ถอนเรื่องกลับมาแก้ไข (แบบร่าง)" :
-          h.action === "edit" ? "แก้ไขข้อมูลโดย Admin" : "";
+          h.action === "edit" ? `แก้ไขข้อมูลโดย${{ admin: " Admin", supervisor: " หัวหน้างาน", director: " ผู้อำนวยการ" }[MOCK_USERS.find((u) => u.name === h.actor)?.role] || ""}` : "";
         const [datePart, timePart] = (h.date || "").split(" ");
         return (
           <div key={i} className="flex gap-3">
@@ -1072,10 +1485,10 @@ function Timeline({ history }) {
 }
 
 function DetailView({ k }) {
-  const [zoomSrc, setZoomSrc] = useState(null);
+  const [lb, setLb] = useState(null);
   return (
     <div className="space-y-5">
-      <ImageLightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />
+      <ImageLightbox photos={lb?.photos} index={lb?.index} onClose={() => setLb(null)} onIndex={(i) => setLb((x) => ({ ...x, index: i }))} />
       <div className="flex items-start justify-between">
         <div>
           <div className="text-xs" style={{ color: SUB }}>{k.registeredNo} · {k.date}</div>
@@ -1092,6 +1505,7 @@ function DetailView({ k }) {
         <StatusBadge status={k.status} />
       </div>
       <CategoryTags categories={k.categories} />
+      <AwardLevelCard k={k} />
       {k.members && k.members.some((m) => m.name) && (
         <div className="text-sm">
           <div className="font-medium mb-1" style={{ color: INK }}>สมาชิกทีม</div>
@@ -1133,8 +1547,8 @@ function DetailView({ k }) {
         )}
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <ImageBox label="ก่อนปรับปรุง" src={k.images.before} onZoom={setZoomSrc} />
-        <ImageBox label="หลังปรับปรุง" src={k.images.after} onZoom={setZoomSrc} />
+        <PhotoGallery label="ก่อนปรับปรุง (Before)" photos={k.images?.before} onZoom={(photos, index) => setLb({ photos, index })} />
+        <PhotoGallery label="หลังปรับปรุง (After)" photos={k.images?.after} onZoom={(photos, index) => setLb({ photos, index })} />
       </div>
       {k.attachments && k.attachments.length > 0 && (
         <AttachmentList attachments={k.attachments} editable={false} />
@@ -1161,11 +1575,108 @@ function SectionPanel({ number, title, headerColor, children }) {
   );
 }
 
+// ---------- บันทึกโปสเตอร์ไปใช้งานต่อ ----------
+function loadExternalScript(src) {
+  return new Promise((resolve, reject) => {
+    if (window.html2canvas) return resolve();
+    const el = document.createElement("script");
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error("โหลดตัวช่วยสร้างรูปภาพไม่สำเร็จ"));
+    document.head.appendChild(el);
+  });
+}
+
+// รูปจาก Google Drive ต้องใช้ลิงก์ที่อนุญาตให้นำไปวาดเป็นไฟล์รูปภาพได้
+function driveImgUrl(src) {
+  const m = String(src).match(/drive\.google\.com\/(?:uc\?[^#]*?id=|file\/d\/)([\w-]+)/);
+  return m ? `https://lh3.googleusercontent.com/d/${m[1]}=w1600` : src;
+}
+
+async function downloadPosterPng(node, filename) {
+  await loadExternalScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+  const canvas = await window.html2canvas(node, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    onclone: (doc) => {
+      doc.querySelectorAll("img").forEach((img) => {
+        img.crossOrigin = "anonymous";
+        img.src = driveImgUrl(img.src);
+      });
+    },
+  });
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("สร้างไฟล์รูปภาพไม่สำเร็จ");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+// พิมพ์เฉพาะโปสเตอร์ (A4 แนวนอน) เลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์เพื่อเก็บเป็นไฟล์
+function printPoster(node, title) {
+  const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map((el) => (el.tagName === "LINK" ? `<link rel="stylesheet" href="${el.href}">` : el.outerHTML))
+    .join("");
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("data-poster-print", "1");
+  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument;
+  doc.open();
+  doc.write(
+    `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${styles}` +
+      `<style>@page{size:A4 landscape;margin:8mm}html,body{margin:0;background:#fff}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>` +
+      `</head><body>${node.outerHTML}</body></html>`
+  );
+  doc.close();
+  const waits = Array.from(doc.images).map((img) => (img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
+  Promise.all(waits).then(() =>
+    setTimeout(() => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } finally {
+        setTimeout(() => iframe.remove(), 4000);
+      }
+    }, 500)
+  );
+}
+
 function PresentationView({ k }) {
-  const [zoomSrc, setZoomSrc] = useState(null);
+  const [lb, setLb] = useState(null);
+  const posterRef = useRef(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const fileBase = `Kaizen_${k.registeredNo || "poster"}`;
+  const savePng = async () => {
+    setMsg("");
+    setSaving(true);
+    try {
+      await downloadPosterPng(posterRef.current, `${fileBase}.png`);
+    } catch (e) {
+      setMsg("ดาวน์โหลดเป็นรูปภาพไม่สำเร็จ (อาจถูกบล็อกโดยเครือข่าย หรือรูปจาก Google Drive ไม่อนุญาตให้ดึง) ลองใช้ปุ่ม \"พิมพ์ / บันทึกเป็น PDF\" แทนได้ค่ะ");
+    }
+    setSaving(false);
+  };
   return (
-    <div className="rounded-xl overflow-hidden border" style={{ borderColor: "#D8DDE5" }}>
-      <ImageLightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />
+    <div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="text-xs mr-auto" style={{ color: SUB }}>นำโปสเตอร์ไปใช้งานต่อ:</span>
+        <button onClick={savePng} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-60" style={{ background: NAVY }}>
+          <Download size={14} /> {saving ? "กำลังสร้างรูปภาพ..." : "ดาวน์โหลดเป็นรูปภาพ (PNG)"}
+        </button>
+        <button onClick={() => printPoster(posterRef.current, fileBase)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: NAVY, color: NAVY }}>
+          <Printer size={14} /> พิมพ์ / บันทึกเป็น PDF
+        </button>
+      </div>
+      {msg && <div className="text-xs mb-3 rounded-lg px-3 py-2" style={{ background: "#FBEAE8", color: "#8B2E24" }}>{msg}</div>}
+    <div ref={posterRef} className="rounded-xl overflow-hidden border" style={{ borderColor: "#D8DDE5" }}>
+      <ImageLightbox photos={lb?.photos} index={lb?.index} onClose={() => setLb(null)} onIndex={(i) => setLb((x) => ({ ...x, index: i }))} />
 
       {/* Header */}
       <div className="px-5 py-3.5 flex items-center justify-between flex-wrap gap-2" style={{ background: NAVY }}>
@@ -1176,6 +1687,7 @@ function PresentationView({ k }) {
               <Paperclip size={17} />
             </span>
           )}
+          <StarRating k={k} size={15} className="ml-1" />
         </div>
         <div className="flex items-center gap-5 text-white text-sm">
           <div className="flex items-center gap-1.5">
@@ -1219,9 +1731,9 @@ function PresentationView({ k }) {
               <span>ภาพก่อน–หลัง | เห็นการเปลี่ยนแปลงในทันที</span>
             </div>
             <div className="p-3 grid gap-2 items-center" style={{ gridTemplateColumns: "1fr auto 1fr", background: "#FBFBFC" }}>
-              <ImageBox label="ก่อนปรับปรุง" src={k.images.before} labelClassName="text-xs font-medium mb-1.5" boxClassName="h-56" onZoom={setZoomSrc} />
+              <PhotoGrid label="ก่อนปรับปรุง" photos={k.images?.before} onZoom={(photos, index) => setLb({ photos, index })} />
               <ChevronRight size={26} style={{ color: "#AEB6C2" }} />
-              <ImageBox label="หลังปรับปรุง" src={k.images.after} labelClassName="text-xs font-medium mb-1.5" boxClassName="h-56" onZoom={setZoomSrc} />
+              <PhotoGrid label="หลังปรับปรุง" photos={k.images?.after} onZoom={(photos, index) => setLb({ photos, index })} />
             </div>
           </div>
 
@@ -1259,55 +1771,71 @@ function PresentationView({ k }) {
         )}
       </div>
     </div>
+    </div>
   );
 }
 
-function Table({ rows, actions, showMissing }) {
+function Table({ rows, actions, showMissing, filterable = true }) {
+  const flt = useKaizenFilters(rows);
+  const shown = filterable ? flt.filtered : rows;
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: "#E2E6EB" }}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr style={{ background: "#FAFBFC" }}>
-            <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>เลขที่ / วันที่</th>
-            <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>เรื่อง</th>
-            <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>หน่วยงาน</th>
-            <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>หมวดหมู่</th>
-            <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>สถานะ</th>
-            <th className="text-right px-4 py-2.5 font-medium" style={{ color: SUB }}>จัดการ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 && (
-            <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: SUB }}>ไม่มีรายการ</td></tr>
-          )}
-          {rows.map((k) => (
-            <tr key={k.id} className="border-t" style={{ borderColor: "#EEF0F3" }}>
-              <td className="px-4 py-3 whitespace-nowrap" style={{ color: SUB }}>{k.registeredNo}<br /><span className="text-xs">{k.date}</span></td>
-              <td className="px-4 py-3 font-medium max-w-[220px]" style={{ color: INK }}>
-                <div className="flex items-center gap-1.5">
-                  <span>{k.title}</span>
-                  {k.attachments && k.attachments.length > 0 && (
-                    <span title={`มีไฟล์แนบ ${k.attachments.length} ไฟล์`} className="inline-flex items-center flex-shrink-0" style={{ color: SUB }}>
-                      <Paperclip size={13} />
+    <div>
+      {filterable && rows.length > 0 && (
+        <div className="mb-2">
+          <RowFilterBar flt={flt} total={rows.length} />
+        </div>
+      )}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "#E2E6EB" }}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ background: "#FAFBFC" }}>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>เลขที่ / วันที่</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>เรื่อง</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>หน่วยงาน</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>หมวดหมู่</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>สถานะ</th>
+              <th className="text-right px-4 py-2.5 font-medium" style={{ color: SUB }}>จัดการ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 && (
+              <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: SUB }}>{rows.length ? "ไม่พบรายการตามตัวกรอง" : "ไม่มีรายการ"}</td></tr>
+            )}
+            {shown.map((k) => (
+              <tr key={k.id} className="border-t" style={{ borderColor: "#EEF0F3" }}>
+                <td className="px-4 py-3 whitespace-nowrap" style={{ color: SUB }}>{k.registeredNo}<br /><span className="text-xs">{k.date}</span></td>
+                <td className="px-4 py-3 font-medium max-w-[220px]" style={{ color: INK }}>
+                  <div className="flex items-center gap-1.5">
+                    <span>{k.title}</span>
+                    {k.attachments && k.attachments.length > 0 && (
+                      <span title={`มีไฟล์แนบ ${k.attachments.length} ไฟล์`} className="inline-flex items-center flex-shrink-0" style={{ color: SUB }}>
+                        <Paperclip size={13} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <StarRating k={k} size={12} />
+                    {(k.activityType || "Kaizen") === "Suggestion" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-normal" style={{ background: "#F1F3F6", color: "#8A93A3" }}>Suggestion</span>
+                    )}
+                  </div>
+                  {showMissing && (asList(k.images?.before).length === 0 || asList(k.images?.after).length === 0) && (
+                    <span className="inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded-full font-normal" style={{ background: "#FBEAE8", color: "#8B2E24" }}>
+                      <ImageOff size={10} /> {asList(k.images?.before).length === 0 && asList(k.images?.after).length === 0 ? "ยังไม่มีรูปก่อน-หลัง" : asList(k.images?.before).length === 0 ? "ยังไม่มีรูปก่อน" : "ยังไม่มีรูปหลัง"}
                     </span>
                   )}
-                </div>
-                {showMissing && (!k.images?.before || !k.images?.after) && (
-                  <span className="inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded-full font-normal" style={{ background: "#FBEAE8", color: "#8B2E24" }}>
-                    <ImageOff size={10} /> {!k.images?.before && !k.images?.after ? "ยังไม่มีรูปก่อน-หลัง" : !k.images?.before ? "ยังไม่มีรูปก่อน" : "ยังไม่มีรูปหลัง"}
-                  </span>
-                )}
-              </td>
-              <td className="px-4 py-3" style={{ color: SUB }}>{k.department}</td>
-              <td className="px-4 py-3"><CategoryTags categories={k.categories} /></td>
-              <td className="px-4 py-3"><StatusBadge status={k.status} /></td>
-              <td className="px-4 py-3">
-                <div className="flex justify-end gap-1.5">{actions(k)}</div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </td>
+                <td className="px-4 py-3" style={{ color: SUB }}>{k.department}</td>
+                <td className="px-4 py-3"><CategoryTags categories={k.categories} /></td>
+                <td className="px-4 py-3"><StatusBadge status={k.status} /></td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-1.5">{actions(k)}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1373,6 +1901,7 @@ function ReviewModal({ k, onClose, onDecide, roleLabel, allowCategorize }) {
                   </select>
                 </Field>
               </div>
+              <ActivityHelp />
             </div>
             <div className="rounded-xl border p-4" style={{ borderColor: "#E2E6EB" }}>
               <div className="font-medium text-sm mb-3" style={{ color: INK }}>ส่วนที่ 3 · ตรวจสอบข้อมูลการลงทะเบียน (ต้องติ๊กครบก่อนอนุมัติ)</div>
@@ -1485,113 +2014,79 @@ const DB_PALE = "#EAF3FC";
 const DB_BORDER = "#D3E4F7";
 
 function FilterableKaizenTable({ rows, onRowClick, onPresent }) {
-  const [search, setSearch] = useState("");
-  const [colDept, setColDept] = useState("all");
-  const [colCategory, setColCategory] = useState("all");
-  const [colStatus, setColStatus] = useState("all");
-
-  const deptOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.department))).sort(), [rows]);
-
-  const filteredRows = rows.filter((k) => {
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      if (!(`${k.title} ${k.registeredNo}`.toLowerCase().includes(q))) return false;
-    }
-    if (colDept !== "all" && k.department !== colDept) return false;
-    if (colCategory !== "all" && !k.categories.includes(colCategory)) return false;
-    if (colStatus !== "all" && k.status !== colStatus) return false;
-    return true;
-  });
-
+  const flt = useKaizenFilters(rows);
+  const filteredRows = flt.filtered;
   const thBase = { color: "#EAF3FC", fontWeight: 600 };
-  const selCls = "w-full text-[11px] rounded-md px-1.5 py-1 mt-1 outline-none";
-  const selStyle = { background: "rgba(255,255,255,0.15)", color: "white", border: "1px solid rgba(255,255,255,0.3)" };
 
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: DB_BORDER }}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ background: DB_DEEP }}>
-              <th className="text-left px-4 py-2.5 align-top" style={thBase}>เลขที่ / วันที่</th>
-              <th className="text-left px-4 py-2.5 align-top" style={thBase}>
-                เรื่อง
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="ค้นหา..."
-                  className={selCls}
-                  style={{ ...selStyle, fontWeight: 400 }}
-                />
-              </th>
-              <th className="text-left px-4 py-2.5 align-top" style={thBase}>
-                หน่วยงาน
-                <select value={colDept} onChange={(e) => setColDept(e.target.value)} className={selCls} style={selStyle}>
-                  <option value="all" style={{ color: INK }}>ทั้งหมด</option>
-                  {deptOptions.map((d) => <option key={d} value={d} style={{ color: INK }}>{d}</option>)}
-                </select>
-              </th>
-              <th className="text-left px-4 py-2.5 align-top" style={thBase}>
-                หมวดหมู่
-                <select value={colCategory} onChange={(e) => setColCategory(e.target.value)} className={selCls} style={selStyle}>
-                  <option value="all" style={{ color: INK }}>ทั้งหมด</option>
-                  {CATEGORY_OPTIONS.map((c) => <option key={c} value={c} style={{ color: INK }}>{c}</option>)}
-                </select>
-              </th>
-              <th className="text-left px-4 py-2.5 align-top" style={thBase}>
-                สถานะ
-                <select value={colStatus} onChange={(e) => setColStatus(e.target.value)} className={selCls} style={selStyle}>
-                  <option value="all" style={{ color: INK }}>ทั้งหมด</option>
-                  {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k} style={{ color: INK }}>{v.label}</option>)}
-                </select>
-              </th>
-              <th className="text-right px-4 py-2.5 align-top" style={thBase}>จัดการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: SUB }}>ไม่มีรายการตามเงื่อนไขที่กรอง</td></tr>
-            )}
-            {filteredRows.map((k) => (
-              <tr
-                key={k.id}
-                onClick={() => onRowClick(k)}
-                className="border-t cursor-pointer transition"
-                style={{ borderColor: "#EEF0F3" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = DB_PALE)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <td className="px-4 py-3 whitespace-nowrap" style={{ color: SUB }}>{k.registeredNo}<br /><span className="text-xs">{k.date}</span></td>
-                <td className="px-4 py-3 font-medium max-w-[220px]" style={{ color: INK }}>
-                  <div className="flex items-center gap-1.5">
-                    <span>{k.title}</span>
-                    {k.attachments && k.attachments.length > 0 && (
-                      <span title={`มีไฟล์แนบ ${k.attachments.length} ไฟล์`} className="inline-flex items-center flex-shrink-0" style={{ color: SUB }}>
-                        <Paperclip size={13} />
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3" style={{ color: SUB }}>{k.department}</td>
-                <td className="px-4 py-3"><CategoryTags categories={k.categories} /></td>
-                <td className="px-4 py-3"><StatusBadge status={k.status} /></td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onPresent(k); }}
-                      title="เปิดนำเสนอ"
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border"
-                      style={{ borderColor: "#D8DDE5", color: DB_BLUE }}
-                    >
-                      <Presentation size={13} /> นำเสนอ
-                    </button>
-                    <ChevronRight size={16} style={{ color: DB_BLUE }} />
-                  </div>
-                </td>
+    <div>
+      <div className="rounded-xl p-3 mb-2" style={{ background: DB_DEEP }}>
+        <RowFilterBar flt={flt} total={rows.length} dark />
+      </div>
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: DB_BORDER }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ background: DB_DEEP }}>
+                <th className="text-left px-4 py-2.5" style={thBase}>เลขที่ / วันที่</th>
+                <th className="text-left px-4 py-2.5" style={thBase}>เรื่อง</th>
+                <th className="text-left px-4 py-2.5" style={thBase}>หน่วยงาน</th>
+                <th className="text-left px-4 py-2.5" style={thBase}>หมวดหมู่</th>
+                <th className="text-left px-4 py-2.5" style={thBase}>สถานะ</th>
+                <th className="text-right px-4 py-2.5" style={thBase}>จัดการ</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredRows.length === 0 && (
+                <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: SUB }}>ไม่มีรายการตามเงื่อนไขที่กรอง</td></tr>
+              )}
+              {filteredRows.map((k) => (
+                <tr
+                  key={k.id}
+                  onClick={() => onRowClick(k)}
+                  className="border-t cursor-pointer transition"
+                  style={{ borderColor: "#EEF0F3" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = DB_PALE)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td className="px-4 py-3 whitespace-nowrap" style={{ color: SUB }}>{k.registeredNo}<br /><span className="text-xs">{k.date}</span></td>
+                  <td className="px-4 py-3 font-medium max-w-[220px]" style={{ color: INK }}>
+                    <div className="flex items-center gap-1.5">
+                      <span>{k.title}</span>
+                      {k.attachments && k.attachments.length > 0 && (
+                        <span title={`มีไฟล์แนบ ${k.attachments.length} ไฟล์`} className="inline-flex items-center flex-shrink-0" style={{ color: SUB }}>
+                          <Paperclip size={13} />
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                      <StarRating k={k} size={12} />
+                      {(k.activityType || "Kaizen") === "Suggestion" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-normal" style={{ background: "#F1F3F6", color: "#8A93A3" }}>Suggestion</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3" style={{ color: SUB }}>{k.department}</td>
+                  <td className="px-4 py-3"><CategoryTags categories={k.categories} /></td>
+                  <td className="px-4 py-3"><StatusBadge status={k.status} /></td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onPresent(k); }}
+                        title="เปิดนำเสนอ"
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border"
+                        style={{ borderColor: "#D8DDE5", color: DB_BLUE }}
+                      >
+                        <Presentation size={13} /> นำเสนอ
+                      </button>
+                      <ChevronRight size={16} style={{ color: DB_BLUE }} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -1632,35 +2127,37 @@ function Dashboard({ data, departments, onView, onPresent }) {
     if (kaizenTypeFilter !== "all" && k.kaizenType !== kaizenTypeFilter) return false;
     return true;
   });
+  // ยอดการส่ง Kaizen = หัวหน้างานอนุมัติแล้ว และเป็นประเภทกิจกรรม Kaizen เท่านั้น (ไม่นับ Suggestion)
+  const counted = useMemo(() => filtered.filter(isCountedKaizen), [filtered]);
 
   const costSavingBySection = useMemo(() => {
     const m = {};
-    filtered.forEach((k) => {
+    counted.forEach((k) => {
       const v = parseFloat(k.costSaving) || 0;
       const section = SECTION_MAP[k.department] || "อื่นๆ";
       if (v > 0) m[section] = (m[section] || 0) + v;
     });
     return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
-  }, [filtered]);
+  }, [counted]);
 
   const countByDept = useMemo(() => {
     const m = {};
-    filtered.forEach((k) => (m[k.department] = (m[k.department] || 0) + 1));
+    counted.forEach((k) => (m[k.department] = (m[k.department] || 0) + 1));
     return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
-  }, [filtered]);
+  }, [counted]);
 
   const countBySection = useMemo(() => {
     const m = {};
-    filtered.forEach((k) => {
+    counted.forEach((k) => {
       const section = SECTION_MAP[k.department] || "อื่นๆ";
       m[section] = (m[section] || 0) + 1;
     });
     return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
-  }, [filtered]);
+  }, [counted]);
 
   const byMonth = useMemo(() => {
     const m = {};
-    filtered.forEach((k) => {
+    counted.forEach((k) => {
       const key = k.date.slice(0, 7);
       m[key] = (m[key] || 0) + 1;
     });
@@ -1668,12 +2165,26 @@ function Dashboard({ data, departments, onView, onPresent }) {
       const [y, mo] = key.split("-");
       return { name: `${THAI_MONTHS[parseInt(mo, 10) - 1]} ${y.slice(2)}`, count };
     });
-  }, [filtered]);
+  }, [counted]);
 
-  const total = filtered.length;
-  const kaizenProjectCount = filtered.filter((k) => k.kaizenType === "Kaizen Project").length;
-  const crossFunctionalCount = filtered.filter((k) => k.kaizenType === "Cross functional Kaizen").length;
-  const totalCostSaving = filtered.reduce((sum, k) => sum + (parseFloat(k.costSaving) || 0), 0);
+  const total = counted.length;
+  const kaizenProjectCount = counted.filter((k) => k.kaizenType === "Kaizen Project").length;
+  const crossFunctionalCount = counted.filter((k) => k.kaizenType === "Cross functional Kaizen").length;
+  const totalCostSaving = counted.reduce((sum, k) => sum + (parseFloat(k.costSaving) || 0), 0);
+  const excludedCount = filtered.length - counted.length;
+
+  // จำนวนตามประเภทข้อมูล (หมวด QCDSME) — 1 เรื่องนับได้หลายหมวด
+  const countByCategory = useMemo(() => {
+    const m = Object.fromEntries(CATEGORY_OPTIONS.map((c) => [c, 0]));
+    let none = 0;
+    counted.forEach((k) => {
+      if (!(k.categories || []).length) none += 1;
+      (k.categories || []).forEach((c) => { m[c] = (m[c] || 0) + 1; });
+    });
+    const rows = CATEGORY_OPTIONS.map((c) => ({ name: c, count: m[c] }));
+    if (none) rows.push({ name: "ยังไม่จัดหมวด", count: none });
+    return rows;
+  }, [counted]);
 
   const selectCls = "text-sm rounded-lg border px-2.5 py-1.5";
 
@@ -1749,14 +2260,19 @@ function Dashboard({ data, departments, onView, onPresent }) {
             <span className="text-xs text-white/70 whitespace-nowrap">อัปเดตล่าสุด: {todayISO()}</span>
           </div>
         </div>
+        <ActivityHelp light className="mt-2.5" />
       </div>
 
       <div id="dashboard-print-area" className="space-y-5">
+      <div className="text-xs rounded-lg px-3 py-2" style={{ background: DB_PALE, color: "#4C6A8C" }}>
+        ยอดและกราฟด้านล่างนับเฉพาะ <strong>Kaizen ที่หัวหน้างานอนุมัติแล้ว</strong> และเป็นประเภทกิจกรรม <strong>Kaizen</strong> (ไม่นับ Suggestion และเรื่องที่รอหัวหน้างานอนุมัติ)
+        {excludedCount > 0 && <> · ตามตัวกรองนี้มี {excludedCount} เรื่องที่ยังไม่ถูกนับ (แสดงในตารางด้านล่าง)</>}
+      </div>
       <div className="grid grid-cols-4 gap-4">
         <div className="rounded-xl p-4 text-white" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
           <div className="text-xs font-medium text-white/80">Kaizen รวมทั้งหมด</div>
           <div className="text-3xl font-semibold mt-1.5">{total}</div>
-          <div className="text-xs mt-1 text-white/70">เรื่องทั้งหมดตามตัวกรอง</div>
+          <div className="text-xs mt-1 text-white/70">เฉพาะที่หัวหน้างานอนุมัติแล้ว</div>
         </div>
         <div className="rounded-xl p-4" style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
           <div className="text-xs font-medium" style={{ color: DB_BLUE }}>Kaizen Project</div>
@@ -1789,7 +2305,7 @@ function Dashboard({ data, departments, onView, onPresent }) {
           <div className="text-4xl font-extrabold mt-1.5 text-white relative tracking-tight">
             {totalCostSaving.toLocaleString()}
           </div>
-          <div className="text-xs mt-1 text-white/85 font-medium relative">บาท/ปี ตามตัวกรอง</div>
+          <div className="text-xs mt-1 text-white/85 font-medium relative">บาท/ปี จาก Kaizen ที่นับ</div>
         </div>
       </div>
 
@@ -1818,6 +2334,25 @@ function Dashboard({ data, departments, onView, onPresent }) {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div className="rounded-xl border p-4" style={{ borderColor: DB_BORDER }}>
+        <div className="text-sm font-medium" style={{ color: DB_DEEP }}>จำนวน Kaizen ตามประเภทข้อมูล (Cost, Safety, Quality และอื่นๆ)</div>
+        <div className="text-[11px] mb-3" style={{ color: "#8A9AB0" }}>1 เรื่องนับได้หลายประเภท ถ้า Admin จัดไว้หลายหมวด · "ยังไม่จัดหมวด" คือเรื่องที่ Admin ยังไม่ได้ตรวจและจัดหมวดหมู่</div>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={countByCategory} margin={{ top: 18 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" />
+            <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(v) => `${v} เรื่อง`} />
+            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+              {countByCategory.map((row, i) => (
+                <Cell key={row.name} fill={row.name === "ยังไม่จัดหมวด" ? "#B8C2D0" : ["#1D5FC9", "#3F8FE0", "#2F7D5C", "#D99A2B", "#B23A2E", "#7A5AE0", "#D9577E", "#2BA3B8", "#8A6D3B", "#5B6675"][i % 10]} />
+              ))}
+              <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: DB_DEEP, fontWeight: 600 }} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="rounded-xl border p-4" style={{ borderColor: DB_BORDER }}>
@@ -1881,6 +2416,7 @@ const DEFAULT_AWARD = {
     { id: "team", name: "การทำงานเป็นทีม / ข้ามสายงาน", weight: 10, type: "auto", source: "team" },
     { id: "yokoten", name: "ขยายผลไปหน่วยงานอื่นได้ (Yokoten)", weight: 10, type: "manual" },
   ],
+  starThresholds: [80, 65, 50, 35], // คะแนนคัดกรอง (%) ขั้นต่ำของ 5 / 4 / 3 / 2 ดาว (ต่ำกว่านั้น = 1 ดาว)
   judgeCount: 5,
   judgeNames: {}, // { j1: "ชื่อจริงของกรรมการ (ไม่บังคับ)" }
   trimExtremes: true,
@@ -1896,6 +2432,7 @@ function normalizeAward(a) {
   delete base.judges; // รุ่นก่อนหน้า (Admin/ผอ. เป็นกรรมการ) ไม่ใช้แล้ว
   base.judgeCount = Math.min(5, Math.max(1, toNum(base.judgeCount) || 5));
   base.judgeNames = base.judgeNames || {};
+  base.starThresholds = Array.isArray(base.starThresholds) && base.starThresholds.length === 4 ? base.starThresholds.map((v) => toNum(v)) : DEFAULT_AWARD.starThresholds;
   base.shortlist = Array.isArray(base.shortlist) ? base.shortlist : [];
   base.scores = base.scores || {};
   return base;
@@ -2158,7 +2695,7 @@ function AwardHeader({ cfg, onRename, editable, subtitle, syncMode, onRefresh })
 function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onPresent, onAnnounce, onSendToJudges, onRefresh, syncMode }) {
   const cfg = award;
   const isDirector = currentUser.role === "director";
-  const [sub, setSub] = useState("criteria");
+  const [sub, setSub] = useStoredState("kz_award_sub", "criteria");
   const [confirming, setConfirming] = useState(false);
   const [selected, setSelected] = useState(() => new Set(cfg.shortlist));
   const [topN, setTopN] = useState(5);
@@ -2431,6 +2968,37 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
               </div>
             </AwardSection>
           </div>
+          <AwardSection title="ระดับดาวของ Kaizen แต่ละเรื่อง" sub="ทุกบทบาทเห็นดาวบน Kaizen แต่ละเรื่อง คำนวณจาก 'คะแนนคัดกรอง' ตามเกณฑ์อัตโนมัติด้านบน (Cost Saving, ผลกระทบ, ROI, ทีมงาน) ตั้งเกณฑ์ขั้นต่ำของแต่ละระดับได้ที่นี่">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {[5, 4, 3, 2].map((stars, i) => (
+                <div key={stars}>
+                  <div className="flex items-center gap-0.5 mb-1">
+                    {Array.from({ length: stars }).map((_, j) => <Star key={j} size={14} fill={GOLD} style={{ color: GOLD }} />)}
+                    <span className="text-xs ml-1" style={{ color: SUB }}>ตั้งแต่</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={cfg.starThresholds[i]}
+                      onChange={(e) => set({ starThresholds: cfg.starThresholds.map((v, j) => (j === i ? toNum(e.target.value) : v)) })}
+                      className="w-full rounded border px-2 py-1 text-sm text-right"
+                      style={inputStyle}
+                    />
+                    <span className="text-xs" style={{ color: SUB }}>%</span>
+                  </div>
+                </div>
+              ))}
+              <div>
+                <div className="flex items-center gap-0.5 mb-1">
+                  <Star size={14} fill={GOLD} style={{ color: GOLD }} />
+                  <span className="text-xs ml-1" style={{ color: SUB }}>ที่เหลือ</span>
+                </div>
+                <div className="text-xs pt-1.5" style={{ color: SUB }}>ต่ำกว่าเกณฑ์ 2 ดาว</div>
+              </div>
+            </div>
+          </AwardSection>
           <div className="flex justify-end">
             <button onClick={() => setSub("screen")} className="px-4 py-2 rounded-lg text-sm font-medium text-white flex items-center gap-1.5" style={{ background: NAVY }}>ไปขั้นตอนคัดกรอง <ChevronRight size={16} /></button>
           </div>
@@ -3095,15 +3663,29 @@ function LoginScreen({ onLogin }) {
 }
 
 export default function KaizenApp() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [kaizens, setKaizens] = useState(seedData());
+  // จำผู้ใช้ไว้ในแท็บเบราว์เซอร์ เมื่อกด Refresh จะไม่เด้งกลับหน้า Login (ปิดแท็บหรือกดออกจากระบบแล้วจะหายไป)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const id = sessionStorage.getItem("kz_session_user");
+      return id ? MOCK_USERS.find((u) => u.empId === id) || null : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (currentUser) sessionStorage.setItem("kz_session_user", currentUser.empId);
+      else sessionStorage.removeItem("kz_session_user");
+    } catch (e) {}
+  }, [currentUser]);
+  const [kaizens, setKaizens] = useState(() => seedData().map(normalizeKaizen));
   const [sheetStatus, setSheetStatus] = useState("checking"); // "checking" | "connected" | "demo"
 
   useEffect(() => {
     fetchKaizensFromSheet()
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
-          setKaizens(data);
+          setKaizens(data.map(normalizeKaizen));
           setSheetStatus("connected");
         } else {
           // Sheet เชื่อมได้แต่ยังไม่มีข้อมูล — คงข้อมูลตัวอย่างไว้ให้เห็นหน้าตาระบบ
@@ -3116,7 +3698,7 @@ export default function KaizenApp() {
       });
   }, []);
   const [departments, setDepartments] = useState(DEFAULT_DEPARTMENTS);
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useStoredState("kz_tab", "dashboard");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -3220,7 +3802,7 @@ export default function KaizenApp() {
         date: todayISO(),
         ...formData,
         categories: [],
-        activityType: "Kaizen",
+        activityType: formData.activityType || "Kaizen",
         kaizenType: "Kaizen Project",
         status,
         history: status === "pending_supervisor" ? [{ stage: "ส่งเรื่อง", actor: formData.submittedBy || "พนักงาน", action: "submit", comment: "", date: nowStamp() }] : [],
@@ -3244,10 +3826,16 @@ export default function KaizenApp() {
   };
   const adminSave = (formData, note) => {
     const original = adminEditing;
-    if (!original) return;
+    if (!original || !canEditKaizen(currentUser, original)) return;
     const changed = Object.keys(EDIT_LABELS).filter((key) => JSON.stringify(original[key] ?? "") !== JSON.stringify(formData[key] ?? ""));
-    if ((original.images?.before || null) !== (formData.images?.before || null)) changed.push(formData.images?.before ? "ภาพก่อนปรับปรุง" : "ลบภาพก่อนปรับปรุง");
-    if ((original.images?.after || null) !== (formData.images?.after || null)) changed.push(formData.images?.after ? "ภาพหลังปรับปรุง" : "ลบภาพหลังปรับปรุง");
+    const photoSide = (side, name) => {
+      const before = asList(original.images?.[side]);
+      const after = asList(formData.images?.[side]);
+      if (JSON.stringify(before) === JSON.stringify(after)) return;
+      changed.push(after.length === 0 ? `ลบ${name}` : after.length > before.length ? `${name} (เพิ่มเป็น ${after.length} รูป)` : `${name} (${after.length} รูป)`);
+    };
+    photoSide("before", "ภาพก่อนปรับปรุง");
+    photoSide("after", "ภาพหลังปรับปรุง");
     if (!changed.length && !note) {
       setAdminEditing(null);
       return;
@@ -3265,6 +3853,9 @@ export default function KaizenApp() {
     };
     updateKaizen(original.id, updatedRecord);
     syncKaizenToSheet("update", updatedRecord);
+    if (original.submittedBy && original.submittedBy !== currentUser.name) {
+      pushNotification(original.submittedBy, `${currentUser.role === "supervisor" ? "หัวหน้างาน" : "Admin"}แก้ไขข้อมูลเรื่อง "${original.title}" (${changed.length ? changed.map((c) => EDIT_LABELS[c] || c).join(", ") : "หมายเหตุ"})`, original.id);
+    }
     setAdminEditing(null);
   };
 
@@ -3346,6 +3937,10 @@ export default function KaizenApp() {
     { key: "judge", label: "ให้คะแนน Kaizen Award", icon: Medal, roles: ["judge"] },
   ];
   const NAV = currentUser ? ALL_NAV.filter((n) => n.roles.includes(currentUser.role)) : ALL_NAV;
+  // ถ้าหน้าที่จำไว้ไม่ตรงกับสิทธิ์ของผู้ใช้ ให้พาไปหน้าตามสิทธิ์ของตนเอง
+  useEffect(() => {
+    if (currentUser && !NAV.some((n) => n.key === tab)) setTab(currentUser.role);
+  }, [currentUser, tab]);
 
   if (!currentUser) {
     return (
@@ -3366,6 +3961,7 @@ export default function KaizenApp() {
   const directorQueue = kaizens.filter((k) => k.status === "pending_director");
 
   return (
+    <AwardCtx.Provider value={award}>
     <div className="min-h-screen w-full" style={{ background: SLATE, fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif" }}>
       {/* Top bar */}
       <div className="sticky top-0 z-30 border-b" style={{ background: NAVY_DEEP, borderColor: "#0A1830" }}>
@@ -3496,6 +4092,7 @@ export default function KaizenApp() {
               actions={(k) => (
                 <>
                   <IconBtn icon={Eye} label="ดู" onClick={() => setViewing(k)} color={NAVY} />
+                  <IconBtn icon={Presentation} label="นำเสนอ" onClick={() => setPresenting(k)} color={GOLD} />
                   {(k.status === "draft" || k.status === "rejected") && (
                     <IconBtn icon={Pencil} label="แก้ไข" onClick={() => { setEditing(k); setShowForm(true); }} color={GOLD} />
                   )}
@@ -3519,6 +4116,7 @@ export default function KaizenApp() {
               actions={(k) => (
                 <>
                   <IconBtn icon={Presentation} label="นำเสนอ" onClick={() => setPresenting(k)} color={NAVY} />
+                  <IconBtn icon={Pencil} label="แก้ไขข้อมูล" onClick={() => setAdminEditing(k)} color="#6A4BC9" />
                   <IconBtn icon={ClipboardList} label="ตรวจสอบ" onClick={() => setReviewing(k)} color={GREEN} filled />
                 </>
               )}
@@ -3530,6 +4128,7 @@ export default function KaizenApp() {
                 actions={(k) => (
                   <>
                     <IconBtn icon={Eye} label="ดู" onClick={() => setViewing(k)} color={NAVY} />
+                    <IconBtn icon={Pencil} label="แก้ไขข้อมูล" onClick={() => setAdminEditing(k)} color="#6A4BC9" />
                     <IconBtn icon={Presentation} label="นำเสนอ" onClick={() => setPresenting(k)} color={GOLD} />
                   </>
                 )}
@@ -3570,18 +4169,11 @@ export default function KaizenApp() {
             />
             <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
               <div className="text-sm font-medium" style={{ color: INK }}>รายการทั้งหมดในระบบ</div>
-              <input
-                value={adminSearch}
-                onChange={(e) => setAdminSearch(e.target.value)}
-                placeholder="ค้นหาเลขที่ / เรื่อง / หน่วยงาน"
-                className="rounded-lg border px-3 py-1.5 text-sm w-72"
-                style={inputStyle}
-              />
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {[
                 ["all", `ทั้งหมด (${kaizens.length})`],
-                ["noimage", `ยังไม่มีรูปก่อน-หลัง (${kaizens.filter((k) => !k.images?.before || !k.images?.after).length})`],
+                ["noimage", `ยังไม่มีรูปก่อน-หลัง (${kaizens.filter((k) => asList(k.images?.before).length === 0 || asList(k.images?.after).length === 0).length})`],
                 ["incomplete", `ข้อมูลยังไม่ครบ (${kaizens.filter((k) => missingInfo(k).length > 0).length})`],
               ].map(([key, label]) => (
                 <button
@@ -3598,10 +4190,9 @@ export default function KaizenApp() {
               <Table
                 showMissing
                 rows={kaizens.filter((k) => {
-                  if (adminListFilter === "noimage" && k.images?.before && k.images?.after) return false;
+                  if (adminListFilter === "noimage" && asList(k.images?.before).length > 0 && asList(k.images?.after).length > 0) return false;
                   if (adminListFilter === "incomplete" && missingInfo(k).length === 0) return false;
-                  const q = adminSearch.trim().toLowerCase();
-                  return !q || [k.registeredNo, k.title, k.department].some((v) => String(v || "").toLowerCase().includes(q));
+                  return true;
                 })}
                 actions={(k) => (
                   <>
@@ -3686,7 +4277,7 @@ export default function KaizenApp() {
           onClose={() => setViewing(null)}
           wide
           headerExtra={
-            currentUser?.role === "admin" && (
+            canEditKaizen(currentUser, viewing) && (
               <button
                 onClick={() => { setAdminEditing(viewing); setViewing(null); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
@@ -3702,10 +4293,11 @@ export default function KaizenApp() {
       )}
 
       {adminEditing && (
-        <Modal title="แก้ไขข้อมูล Kaizen (Admin)" onClose={() => setAdminEditing(null)} wide>
+        <Modal title={`แก้ไขข้อมูล Kaizen (${currentUser.role === "admin" ? "Admin" : "หัวหน้างาน"})`} onClose={() => setAdminEditing(null)} wide>
           <KaizenForm
             key={adminEditing.id}
             initial={adminEditing}
+            editorLabel={currentUser.role === "admin" ? "Admin" : "หัวหน้างาน"}
             adminMode
             currentUser={currentUser}
             departments={departments}
@@ -3749,5 +4341,6 @@ export default function KaizenApp() {
         </Modal>
       )}
     </div>
+    </AwardCtx.Provider>
   );
 }
