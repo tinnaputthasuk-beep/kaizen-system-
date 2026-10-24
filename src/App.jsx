@@ -72,13 +72,15 @@ async function fetchAwardFromSheet() {
 
 async function postAward(action, record) {
   try {
-    await fetch(GOOGLE_SHEETS_API_URL, {
+    const res = await fetch(GOOGLE_SHEETS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action, record }),
     });
+    return res.ok;
   } catch (err) {
     console.warn("Save award failed:", err.message);
+    return false;
   }
 }
 // บันทึกเฉพาะ "เกณฑ์/กรรมการ/ผลประกาศ" (ไม่รวมคะแนน) เพื่อไม่ให้ไปทับคะแนนของกรรมการ
@@ -172,6 +174,8 @@ const MOCK_USERS = [
   { name: "กรรมการ 3", empId: "3003", role: "judge", departments: [] },
   { name: "กรรมการ 4", empId: "3004", role: "judge", departments: [] },
   { name: "กรรมการ 5", empId: "3005", role: "judge", departments: [] },
+  { name: "กรรมการ 6", empId: "3006", role: "judge", departments: [] },
+  { name: "กรรมการ 7", empId: "3007", role: "judge", departments: [] },
 
   { name: "ทิพวรรณ บุญจิตติ", empId: "2001", role: "supervisor", departments: ["Production Planning & Data"] },
   { name: "ธัญยธรณ์ สุขุมาลพันธ์", empId: "2002", role: "supervisor", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1", "Thread forming 3", "Packing 3"] },
@@ -2396,7 +2400,13 @@ const AUTO_SOURCES = {
 };
 
 // บัญชีกรรมการ (ชื่อผู้ใช้ตรงกับ MOCK_USERS ที่ role = "judge")
-const JUDGE_SLOTS = [1, 2, 3, 4, 5].map((n) => ({ id: `j${n}`, userName: `กรรมการ ${n}` }));
+const MAX_JUDGES = 7;
+const JUDGE_SLOTS = Array.from({ length: MAX_JUDGES }, (_, i) => i + 1).map((n) => ({ id: `j${n}`, userName: `กรรมการ ${n}` }));
+const AUTO_LABELS = {
+  cost: "มูลค่า Cost Saving", roi: "ความคุ้มค่าการลงทุน (ROI)", impact: "ผลกระทบ (หมวดผลกระทบสูง)", team: "การทำงานเป็นทีม / ข้ามสายงาน",
+};
+const OLD_IMPACT_NAME = "ผลกระทบด้าน Safety / Quality / Food Safety";
+const NEW_IMPACT_NAME = "ผลกระทบสูง (Safety / Quality / Food Safety / Cost)";
 
 const DEFAULT_AWARD = {
   roundName: "Kaizen Award 2026",
@@ -2407,15 +2417,16 @@ const DEFAULT_AWARD = {
   mainPrizes: 3,
   honorable: 2,
   costTiers: [100000, 50000, 20000, 5000],
-  highImpactCats: ["Safety", "Food Safety", "Quality"],
+  highImpactCats: ["Safety", "Food Safety", "Quality", "Cost"],
   criteria: [
     { id: "cost", name: "มูลค่า Cost Saving", weight: 30, type: "auto", source: "cost" },
-    { id: "impact", name: "ผลกระทบด้าน Safety / Quality / Food Safety", weight: 25, type: "auto", source: "impact" },
+    { id: "impact", name: NEW_IMPACT_NAME, weight: 25, type: "auto", source: "impact" },
     { id: "innov", name: "ความคิดสร้างสรรค์ / ความแปลกใหม่", weight: 15, type: "manual" },
     { id: "roi", name: "ความคุ้มค่าการลงทุน (ROI)", weight: 10, type: "auto", source: "roi" },
     { id: "team", name: "การทำงานเป็นทีม / ข้ามสายงาน", weight: 10, type: "auto", source: "team" },
     { id: "yokoten", name: "ขยายผลไปหน่วยงานอื่นได้ (Yokoten)", weight: 10, type: "manual" },
   ],
+  cfgVersion: 2, // 2 = หมวดผลกระทบสูงรวม Cost
   starThresholds: [80, 65, 50, 35], // คะแนนคัดกรอง (%) ขั้นต่ำของ 5 / 4 / 3 / 2 ดาว (ต่ำกว่านั้น = 1 ดาว)
   judgeCount: 5,
   judgeNames: {}, // { j1: "ชื่อจริงของกรรมการ (ไม่บังคับ)" }
@@ -2427,10 +2438,24 @@ const DEFAULT_AWARD = {
   decision: null,
 };
 
+const EMPTY_DRAFT = {};
+const AWARD_SETTING_LABELS = {
+  roundName: "ชื่อรอบประกวด", year: "ผู้มีสิทธิ์เข้าประกวด", activity: "ผู้มีสิทธิ์เข้าประกวด", minCostSaving: "ผู้มีสิทธิ์เข้าประกวด",
+  statuses: "ผู้มีสิทธิ์เข้าประกวด", criteria: "เกณฑ์ / น้ำหนัก", costTiers: "ช่วงคะแนน Cost Saving", highImpactCats: "หมวดผลกระทบสูง",
+  mainPrizes: "จำนวนรางวัล", honorable: "จำนวนรางวัล", judgeCount: "จำนวนกรรมการ", judgeNames: "ชื่อกรรมการ",
+  trimExtremes: "วิธีเฉลี่ยคะแนน", starThresholds: "ระดับดาว",
+};
+
 function normalizeAward(a) {
   const base = { ...DEFAULT_AWARD, ...(a || {}) };
   delete base.judges; // รุ่นก่อนหน้า (Admin/ผอ. เป็นกรรมการ) ไม่ใช้แล้ว
-  base.judgeCount = Math.min(5, Math.max(1, toNum(base.judgeCount) || 5));
+  base.judgeCount = Math.min(MAX_JUDGES, Math.max(1, toNum(base.judgeCount) || 5));
+  // ข้อมูลที่บันทึกไว้ก่อนหน้า (ยังไม่มี cfgVersion 2): เพิ่ม Cost เข้าหมวดผลกระทบสูงให้ 1 ครั้ง (หลังจากนั้นปรับเองได้ตามต้องการ)
+  if (a && (a.cfgVersion || 1) < 2) {
+    base.highImpactCats = Array.from(new Set([...(base.highImpactCats || []), "Cost"]));
+    base.criteria = (base.criteria || DEFAULT_AWARD.criteria).map((c) => (c.id === "impact" && c.name === OLD_IMPACT_NAME ? { ...c, name: NEW_IMPACT_NAME } : c));
+  }
+  base.cfgVersion = 2;
   base.judgeNames = base.judgeNames || {};
   base.starThresholds = Array.isArray(base.starThresholds) && base.starThresholds.length === 4 ? base.starThresholds.map((v) => toNum(v)) : DEFAULT_AWARD.starThresholds;
   base.shortlist = Array.isArray(base.shortlist) ? base.shortlist : [];
@@ -2692,8 +2717,10 @@ function AwardHeader({ cfg, onRename, editable, subtitle, syncMode, onRefresh })
 }
 
 // ================= หน้า Admin / ผอ. =================
-function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onPresent, onAnnounce, onSendToJudges, onRefresh, syncMode }) {
-  const cfg = award;
+function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onPresent, onAnnounce, onSendToJudges, onJudgesNotice, draft, onDraftChange, onSaveSettings, onRefresh, syncMode }) {
+  const draftSafe = draft || EMPTY_DRAFT;
+  // cfg = ค่าที่บันทึกแล้ว + ร่างที่กำลังแก้ (ผู้ใช้อื่น/กรรมการ/ดาว ยังเห็นเฉพาะค่าที่บันทึกแล้ว)
+  const cfg = useMemo(() => ({ ...award, ...draftSafe }), [award, draftSafe]);
   const isDirector = currentUser.role === "director";
   const [sub, setSub] = useStoredState("kz_award_sub", "criteria");
   const [confirming, setConfirming] = useState(false);
@@ -2701,9 +2728,28 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
   const [topN, setTopN] = useState(5);
   const [unlocking, setUnlocking] = useState(null);
   const [judgeFilter, setJudgeFilter] = useState("all");
+  const [clearing, setClearing] = useState(false);
+  const [clearScoresToo, setClearScoresToo] = useState(true);
 
   const locked = !!cfg.decision;
-  const set = (patch) => onChange({ ...cfg, ...patch });
+  const [saveMsg, setSaveMsg] = useState(null); // { type: "ok" | "error", text }
+  const [saving, setSaving] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newCrit, setNewCrit] = useState({ name: "", desc: "", weight: 10, type: "manual" });
+  // set = แก้การตั้งค่า (เก็บเป็นร่างจนกว่าจะกดบันทึก) · commit = การกระทำที่มีผลทันที (ส่งกรรมการ / ประกาศผล)
+  const set = (patch) => {
+    setSaveMsg(null);
+    setConfirmCancel(false);
+    onDraftChange((d) => {
+      const merged = { ...d, ...patch };
+      Object.keys(merged).forEach((key) => {
+        if (JSON.stringify(merged[key]) === JSON.stringify(award[key])) delete merged[key];
+      });
+      return merged;
+    });
+  };
+  const commit = (patch) => onChange({ ...award, ...patch });
   const judges = activeJudges(cfg);
   const eligible = useMemo(() => eligibleForAward(kaizens, cfg).map((k) => ({ k, pre: prescreen(k, cfg) })).sort((a, b) => b.pre - a.pre || toNum(b.k.costSaving) - toNum(a.k.costSaving)), [kaizens, cfg]);
   const results = useMemo(() => rankAward(kaizens, cfg), [kaizens, cfg]);
@@ -2716,11 +2762,54 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
   const submittedCount = progress.filter((p) => p.submittedAt).length;
   const years = useMemo(() => [...new Set(kaizens.map((k) => String(k.date || "").slice(0, 4)).filter((y) => /^\d{4}$/.test(y)))].sort().reverse(), [kaizens]);
   const shortlistChanged = selected.size !== cfg.shortlist.length || [...selected].some((id) => !cfg.shortlist.includes(id));
+  const dirtyKeys = Object.keys(draftSafe);
+  const dirtyCount = dirtyKeys.length;
+  const dirtyLabels = Array.from(new Set(dirtyKeys.map((k) => AWARD_SETTING_LABELS[k] || k)));
+  const manualIds = (list) => list.filter((c) => c.type === "manual").map((c) => c.id).sort().join(",");
+  const manualChangedAfterSend = award.shortlist.length > 0 && manualIds(award.criteria) !== manualIds(cfg.criteria);
+  const blankCrit = cfg.criteria.some((c) => !String(c.name || "").trim());
+  const saveSettings = async () => {
+    if (!dirtyCount || saving) return;
+    if (blankCrit) {
+      setSaveMsg({ type: "error", text: "กรุณาตั้งชื่อเกณฑ์ให้ครบทุกข้อก่อนบันทึก" });
+      return;
+    }
+    setSaving(true);
+    const r = await onSaveSettings({ ...award, ...draftSafe });
+    setSaving(false);
+    if (r === "error") {
+      setSaveMsg({ type: "error", text: "บันทึกลง Google Sheet ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกด \"บันทึกการตั้งค่า\" อีกครั้ง (การแก้ไขของท่านยังอยู่ ไม่หาย)" });
+      return;
+    }
+    onDraftChange({});
+    setSaveMsg({
+      type: "ok",
+      text: r === "sheet"
+        ? `บันทึกการตั้งค่าลง Google Sheet เรียบร้อยแล้ว (${nowStamp()})`
+        : `บันทึกแล้ว (${nowStamp()}) · โหมดทดลอง: เก็บไว้เฉพาะในหน้านี้ จะหายเมื่อรีเฟรช ติดตั้ง Award_Addon.gs เพื่อบันทึกถาวร`,
+    });
+  };
+  const discardDraft = () => {
+    onDraftChange({});
+    setConfirmCancel(false);
+    setSaveMsg(null);
+  };
 
   // ---- criteria
   const setCrit = (id, patch) => set({ criteria: cfg.criteria.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   const removeCrit = (id) => cfg.criteria.length > 1 && set({ criteria: cfg.criteria.filter((c) => c.id !== id) });
-  const addCrit = () => set({ criteria: [...cfg.criteria, { id: `m_${uid()}`, name: "เกณฑ์ใหม่ (กรรมการให้คะแนน)", weight: 5, type: "manual" }] });
+  const availableAuto = Object.keys(AUTO_SOURCES).filter((src) => !cfg.criteria.some((c) => c.type === "auto" && c.source === src));
+  const addCritNew = () => {
+    const name = newCrit.name.trim();
+    if (!name) return;
+    const base = { name, desc: newCrit.desc.trim(), weight: toNum(newCrit.weight) };
+    const item = newCrit.type === "manual"
+      ? { ...base, id: `m_${uid()}`, type: "manual" }
+      : { ...base, id: cfg.criteria.some((c) => c.id === newCrit.type) ? `a_${uid()}` : newCrit.type, type: "auto", source: newCrit.type };
+    set({ criteria: [...cfg.criteria, item] });
+    setNewCrit({ name: "", desc: "", weight: 10, type: "manual" });
+    setAdding(false);
+  };
   const normalize = () => {
     if (!totalW) return;
     const scaled = cfg.criteria.map((c) => ({ ...c, weight: Math.round((toNum(c.weight) / totalW) * 100) }));
@@ -2739,10 +2828,28 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
   const pickTop = () => setSelected(new Set(eligible.slice(0, Math.max(1, toNum(topN))).map((x) => x.k.id)));
   const sendShortlist = () => {
     const ids = eligible.filter((x) => selected.has(x.k.id)).map((x) => x.k.id);
-    if (!ids.length) return;
-    set({ shortlist: ids, sentAt: nowStamp(), sentBy: currentUser.name });
+    if (!ids.length || dirtyCount > 0) return;
+    commit({ shortlist: ids, sentAt: nowStamp(), sentBy: currentUser.name });
     onSendToJudges(ids.length);
     setSub("tracking");
+  };
+
+  // ล้างรายการที่ส่งให้กรรมการ เพื่อเลือกใหม่และส่งใหม่
+  const scoredJudges = judges.filter((j) => Object.keys(cfg.scores?.[j.id] || {}).some((key) => key !== "__meta"));
+  const clearShortlist = () => {
+    commit({ shortlist: [], sentAt: null, sentBy: null });
+    Object.keys(cfg.scores || {}).forEach((jid) => {
+      const cur = cfg.scores[jid] || {};
+      if (clearScoresToo) {
+        if (Object.keys(cur).length) onScore(jid, {});
+      } else if (cur.__meta) {
+        const { __meta, ...rest } = cur;
+        onScore(jid, rest); // เปิดให้กรรมการที่เคยกดส่งแล้ว กลับมาให้คะแนนเพิ่มได้ คะแนนเดิมยังอยู่
+      }
+    });
+    setSelected(new Set());
+    setClearing(false);
+    onJudgesNotice(`Admin ล้างรายการที่ส่งให้ตัดสินใน ${cfg.roundName} แล้ว${clearScoresToo && scoredJudges.length ? " (คะแนนเดิมถูกล้าง)" : ""} กรุณารอรายการชุดใหม่`);
   };
 
   const unlockJudge = (jid) => {
@@ -2776,7 +2883,7 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
 
   const confirmResult = () => {
     const winners = results.filter((r) => r.tier).map((r) => ({ id: r.k.id, registeredNo: r.k.registeredNo, title: r.k.title, department: r.k.department, submittedBy: r.k.submittedBy, tier: r.tier.label, total: r.total }));
-    set({ decision: { confirmedBy: currentUser.name, confirmedAt: nowStamp(), winners } });
+    commit({ decision: { confirmedBy: currentUser.name, confirmedAt: nowStamp(), winners } });
     onAnnounce(winners);
     setConfirming(false);
   };
@@ -2807,7 +2914,7 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
             <strong>ประกาศผลแล้ว</strong> โดย {cfg.decision.confirmedBy} เมื่อ {cfg.decision.confirmedAt} · เกณฑ์และคะแนนถูกล็อกไว้
           </div>
           {isDirector && (
-            <button onClick={() => set({ decision: null })} className="text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: "#C9962B", color: "#6B4A10" }}>
+            <button onClick={() => commit({ decision: null })} className="text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: "#C9962B", color: "#6B4A10" }}>
               ยกเลิกการประกาศ & เปิดแก้ไข
             </button>
           )}
@@ -2857,7 +2964,7 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
 
           <AwardSection
             title="เกณฑ์การให้คะแนนและน้ำหนัก"
-            sub="เกณฑ์อัตโนมัติใช้คัดกรองในขั้นตอนที่ 2 · เกณฑ์สีม่วงให้คณะกรรมการเป็นผู้ให้คะแนน · รวมเป็นคะแนนเต็ม 100"
+            sub="คลิกที่ชื่อหรือคำอธิบายของแต่ละเกณฑ์เพื่อแก้ไขข้อความได้ · เพิ่ม/ลบเกณฑ์ได้ · เกณฑ์สีฟ้า (อัตโนมัติ) แก้ไขได้เฉพาะข้อความและน้ำหนัก วิธีคำนวณยังเป็นไปตามเดิม · เกณฑ์สีม่วงให้กรรมการให้คะแนน · รวมเป็นคะแนนเต็ม 100"
             right={
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={totalW === 100 ? { background: "#E9F5EF", color: GREEN } : { background: "#FBEAE8", color: RED }}>น้ำหนักรวม {totalW}%</span>
@@ -2870,9 +2977,23 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
                 <div key={c.id} className="rounded-lg border p-3 flex flex-col md:flex-row md:items-center gap-3" style={{ borderColor: "#E3E7ED" }}>
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: CRIT_COLORS[i % CRIT_COLORS.length] }} />
-                    <div className="flex-1 min-w-0">
-                      <input value={c.name} onChange={(e) => setCrit(c.id, { name: e.target.value })} className="w-full text-sm font-medium outline-none bg-transparent" style={{ color: INK }} />
-                      <div className="text-[11px] mt-0.5" style={{ color: SUB }}>{c.type === "auto" ? AUTO_SOURCES[c.source] : "กรรมการแต่ละท่านให้คะแนน 1-5 แยกกัน แล้วระบบหาค่าเฉลี่ย"}</div>
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <input
+                        value={c.name}
+                        onChange={(e) => setCrit(c.id, { name: e.target.value })}
+                        placeholder="ชื่อเกณฑ์ (คลิกเพื่อแก้ไข)"
+                        title="คลิกเพื่อแก้ไขชื่อเกณฑ์"
+                        className="w-full text-sm font-medium rounded-md border px-2 py-1 outline-none focus:border-blue-400"
+                        style={{ color: INK, borderColor: String(c.name || "").trim() ? "#D8DDE5" : RED, background: "#FCFCFD" }}
+                      />
+                      <input
+                        value={c.desc ?? (c.type === "auto" ? AUTO_SOURCES[c.source] : "กรรมการแต่ละท่านให้คะแนน 1-5 แยกกัน แล้วระบบหาค่าเฉลี่ย")}
+                        onChange={(e) => setCrit(c.id, { desc: e.target.value })}
+                        placeholder="คำอธิบายเกณฑ์ (ไม่บังคับ)"
+                        title="คลิกเพื่อแก้ไขคำอธิบาย"
+                        className="w-full text-[12px] rounded-md border px-2 py-1 outline-none focus:border-blue-400"
+                        style={{ color: SUB, borderColor: "#E8ECF1", background: "#FCFCFD" }}
+                      />
                     </div>
                     <span className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0" style={c.type === "auto" ? { background: "#EAF3FC", color: "#1D5FC9" } : { background: "#F1ECFD", color: JUDGE_PURPLE }}>
                       {c.type === "auto" ? "อัตโนมัติ" : "กรรมการให้คะแนน"}
@@ -2887,14 +3008,48 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
                 </div>
               ))}
             </div>
-            <button onClick={addCrit} className="mt-3 text-sm font-medium flex items-center gap-1.5" style={{ color: NAVY }}><Plus size={16} /> เพิ่มเกณฑ์ที่กรรมการให้คะแนน</button>
+            {!adding ? (
+              <button onClick={() => setAdding(true)} className="mt-3 text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg border" style={{ color: NAVY, borderColor: NAVY }}>
+                <Plus size={16} /> เพิ่มเกณฑ์ใหม่
+              </button>
+            ) : (
+              <div className="mt-3 rounded-lg border p-3 space-y-2.5" style={{ borderColor: "#B9D2F0", background: "#F7FAFE" }}>
+                <div className="text-sm font-semibold" style={{ color: INK }}>เพิ่มเกณฑ์ใหม่</div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="md:col-span-2">
+                    <Field label="ชื่อเกณฑ์" required>
+                      <TextInput value={newCrit.name} onChange={(e) => setNewCrit((n) => ({ ...n, name: e.target.value }))} placeholder="เช่น ความยั่งยืน / ผลต่อสิ่งแวดล้อม" />
+                    </Field>
+                  </div>
+                  <Field label="ประเภทเกณฑ์">
+                    <select className={inputCls} style={inputStyle} value={newCrit.type} onChange={(e) => setNewCrit((n) => ({ ...n, type: e.target.value }))}>
+                      <option value="manual">กรรมการให้คะแนน (1-5 ต่อท่าน)</option>
+                      {availableAuto.map((src) => <option key={src} value={src}>คำนวณอัตโนมัติ: {AUTO_LABELS[src]}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="น้ำหนัก (%)">
+                    <TextInput type="number" min="0" value={newCrit.weight} onChange={(e) => setNewCrit((n) => ({ ...n, weight: e.target.value }))} />
+                  </Field>
+                </div>
+                <Field label="คำอธิบายเกณฑ์ (ไม่บังคับ — กรรมการจะเห็นใต้ชื่อเกณฑ์ตอนให้คะแนน)">
+                  <TextInput value={newCrit.desc} onChange={(e) => setNewCrit((n) => ({ ...n, desc: e.target.value }))} placeholder="เช่น ลดการใช้พลังงาน น้ำ หรือของเสียได้จริงและต่อเนื่อง" />
+                </Field>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => { setAdding(false); setNewCrit({ name: "", desc: "", weight: 10, type: "manual" }); }} className="px-3 py-1.5 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+                  <button onClick={addCritNew} disabled={!newCrit.name.trim()} className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 flex items-center gap-1.5" style={{ background: NAVY }}>
+                    <Plus size={15} /> เพิ่มเกณฑ์นี้
+                  </button>
+                </div>
+                <div className="text-[11px]" style={{ color: SUB }}>เพิ่มแล้วจะอยู่ในรายการด้านบนเป็นร่าง ยังไม่มีผลจนกว่าจะกด "บันทึกการตั้งค่า"</div>
+              </div>
+            )}
           </AwardSection>
 
           <AwardSection title="คณะกรรมการ" sub="กรรมการแต่ละท่านมีบัญชีและรหัสผ่านของตัวเอง เข้าระบบแล้วจะเห็นเฉพาะหน้าให้คะแนนของตัวเอง ไม่เห็นคะแนนของกรรมการท่านอื่น">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-sm" style={{ color: INK }}>จำนวนกรรมการรอบนี้</span>
               <select className="rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} value={cfg.judgeCount} onChange={(e) => set({ judgeCount: Number(e.target.value) })}>
-                {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} ท่าน</option>)}
+                {Array.from({ length: MAX_JUDGES }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} ท่าน</option>)}
               </select>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -2999,7 +3154,15 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
               </div>
             </div>
           </AwardSection>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <button
+              onClick={saveSettings}
+              disabled={!dirtyCount || saving}
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-60"
+              style={{ background: dirtyCount ? GREEN : "#8FA3BA" }}
+            >
+              <CheckCircle2 size={16} /> {saving ? "กำลังบันทึก..." : dirtyCount ? `บันทึกการตั้งค่าทั้งหมด (${dirtyLabels.length} หัวข้อ)` : "บันทึกการตั้งค่าแล้ว"}
+            </button>
             <button onClick={() => setSub("screen")} className="px-4 py-2 rounded-lg text-sm font-medium text-white flex items-center gap-1.5" style={{ background: NAVY }}>ไปขั้นตอนคัดกรอง <ChevronRight size={16} /></button>
           </div>
         </div>
@@ -3074,16 +3237,65 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
               ) : (
                 "ยังไม่ได้ส่งเรื่องให้คณะกรรมการ"
               )}
+              {dirtyCount > 0 && (
+                <div className="text-xs mt-1" style={{ color: RED }}>มีการแก้ไขการตั้งค่าที่ยังไม่ได้บันทึก กรุณากด "บันทึกการตั้งค่า" ก่อนส่งให้กรรมการ</div>
+              )}
             </div>
-            <button
-              onClick={sendShortlist}
-              disabled={!selected.size || (!shortlistChanged && cfg.shortlist.length > 0)}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-40"
-              style={{ background: JUDGE_PURPLE }}
-            >
-              <Trophy size={16} /> {cfg.shortlist.length ? "อัปเดตรายการที่ส่งกรรมการ" : `ส่ง ${selected.size} เรื่องให้กรรมการตัดสิน`}
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {cfg.shortlist.length > 0 && (
+                <button
+                  onClick={() => { setClearScoresToo(true); setClearing((c) => !c); }}
+                  className="px-3 py-2 rounded-lg text-sm font-medium border flex items-center gap-1.5"
+                  style={{ borderColor: RED, color: RED, background: clearing ? "#FBEAE8" : "white" }}
+                  title="ล้างรายการที่ส่งให้กรรมการ เพื่อเลือกใหม่และส่งใหม่"
+                >
+                  <Trash2 size={15} /> ล้างข้อมูลที่ส่งให้กรรมการ
+                </button>
+              )}
+              <button
+                onClick={sendShortlist}
+                disabled={!selected.size || dirtyCount > 0 || (!shortlistChanged && cfg.shortlist.length > 0)}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-40"
+                style={{ background: JUDGE_PURPLE }}
+              >
+                <Trophy size={16} /> {cfg.shortlist.length ? "อัปเดตรายการที่ส่งกรรมการ" : `ส่ง ${selected.size} เรื่องให้กรรมการตัดสิน`}
+              </button>
+            </div>
           </div>
+          {clearing && cfg.shortlist.length > 0 && (
+            <div className="rounded-xl border p-4 space-y-3" style={{ background: "#FBEAE8", borderColor: "#F0C3BD" }}>
+              <div className="text-sm font-semibold" style={{ color: "#8B2E24" }}>ล้างข้อมูลที่ส่งให้กรรมการ แล้วเริ่มเลือกใหม่?</div>
+              <ul className="text-sm space-y-1" style={{ color: INK }}>
+                <li>• รายการที่ส่งไปแล้ว <strong>{cfg.shortlist.length} เรื่อง</strong> จะถูกถอนออกจากหน้ากรรมการทุกท่าน และช่องที่ติ๊กเลือกไว้ด้านบนจะถูกล้าง</li>
+                {scoredJudges.length > 0 && (
+                  <li>• มีกรรมการ <strong>{scoredJudges.length} ท่าน</strong> ที่ให้คะแนนไว้แล้ว (กดส่งแล้ว {submittedCount} ท่าน)</li>
+                )}
+                <li>• ต้องกด "ส่ง ... เรื่องให้กรรมการตัดสิน" อีกครั้ง กรรมการจึงจะเห็นรายการชุดใหม่</li>
+              </ul>
+              {scoredJudges.length > 0 && (
+                <div className="rounded-lg p-3 space-y-2" style={{ background: "rgba(255,255,255,0.7)" }}>
+                  <label className="flex items-start gap-2 text-sm" style={{ color: INK }}>
+                    <input type="checkbox" className="mt-0.5" checked={clearScoresToo} onChange={(e) => setClearScoresToo(e.target.checked)} />
+                    <span>
+                      <strong>ล้างคะแนนของกรรมการทั้งหมดด้วย</strong> (แนะนำ เมื่อจะเลือกเรื่องชุดใหม่)
+                      <span className="block text-[11px] mt-0.5" style={{ color: SUB }}>
+                        ถ้าไม่ติ๊ก: คะแนนเดิมจะยังอยู่ ถ้าเรื่องนั้นถูกเลือกกลับมาในชุดใหม่ คะแนนจะกลับมาใช้ต่อ และกรรมการที่เคยกดส่งแล้วจะถูกเปิดให้ให้คะแนนเพิ่มได้
+                      </span>
+                    </span>
+                  </label>
+                  <button onClick={exportExcel} className="text-xs px-3 py-1.5 rounded-lg border font-medium flex items-center gap-1.5 bg-white" style={{ borderColor: GREEN, color: GREEN }}>
+                    <FileSpreadsheet size={14} /> Export Excel เก็บคะแนนชุดนี้ไว้ก่อน
+                  </button>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setClearing(false)} className="px-3 py-2 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+                <button onClick={clearShortlist} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5" style={{ background: RED }}>
+                  <Trash2 size={15} /> ยืนยันล้างข้อมูล
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3388,6 +3600,40 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
           )}
         </div>
       )}
+
+      {(dirtyCount > 0 || saveMsg) && (
+        <div
+          className="sticky bottom-3 z-20 rounded-xl border p-3 flex items-center justify-between gap-3 flex-wrap bg-white"
+          style={{ borderColor: dirtyCount > 0 ? "#E8C77E" : saveMsg?.type === "ok" ? "#A9D6BF" : "#F0C3BD", boxShadow: "0 6px 20px rgba(11,29,51,0.12)" }}
+        >
+          <div className="text-sm flex-1 min-w-[260px]" style={{ color: INK }}>
+            {dirtyCount > 0 ? (
+              <>
+                <strong style={{ color: "#8A5B14" }}>มีการแก้ไขที่ยังไม่ได้บันทึก</strong> · {dirtyLabels.join(", ")}
+                {totalW !== 100 && <div className="text-xs mt-0.5" style={{ color: "#8A5B14" }}>น้ำหนักรวมตอนนี้ {totalW}% (ไม่ครบ 100% ระบบจะคำนวณเป็นสัดส่วนให้ แต่แนะนำให้กด "ปรับให้รวม 100%")</div>}
+                {manualChangedAfterSend && <div className="text-xs mt-0.5" style={{ color: RED }}>ได้ส่งเรื่องให้กรรมการไปแล้ว การเพิ่ม/ลบเกณฑ์ที่กรรมการให้คะแนนจะทำให้ความคืบหน้าเปลี่ยน กรรมการที่กดส่งแล้วต้องให้ Admin เปิดสิทธิ์แก้ไขที่แท็บ "3. ติดตามกรรมการ"</div>}
+                {blankCrit && <div className="text-xs mt-0.5" style={{ color: RED }}>มีเกณฑ์ที่ยังไม่ได้ตั้งชื่อ</div>}
+              </>
+            ) : null}
+            {saveMsg && <div className={dirtyCount > 0 ? "text-xs mt-0.5" : ""} style={{ color: saveMsg.type === "ok" ? GREEN : RED }}>{saveMsg.text}</div>}
+          </div>
+          {dirtyCount > 0 && (
+            <div className="flex items-center gap-2">
+              {confirmCancel ? (
+                <>
+                  <button onClick={() => setConfirmCancel(false)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>ไม่ยกเลิก</button>
+                  <button onClick={discardDraft} className="px-3 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: RED }}>ยืนยันยกเลิกการแก้ไข</button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmCancel(true)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิกการแก้ไข</button>
+              )}
+              <button onClick={saveSettings} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-60" style={{ background: GREEN }}>
+                <CheckCircle2 size={16} /> {saving ? "กำลังบันทึก..." : "บันทึกการตั้งค่า"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -3486,6 +3732,7 @@ function JudgePage({ kaizens, award, currentUser, onScore, onView, onPresent, on
                   {manualCrit.map((c) => (
                     <div key={c.id}>
                       <div className="text-xs font-medium mb-1" style={{ color: INK }}>{c.name} <span style={{ color: SUB }}>({c.weight}%)</span></div>
+                      {c.desc ? <div className="text-[11px] mb-1" style={{ color: SUB }}>{c.desc}</div> : null}
                       <div className="flex gap-1.5">
                         {[1, 2, 3, 4, 5].map((v) => (
                           <button
@@ -3729,6 +3976,16 @@ export default function KaizenApp() {
     loadAward();
   }, []);
 
+  // การแก้ไขในหน้า "1. ตั้งเกณฑ์" เก็บเป็นร่างก่อน จนกว่าจะกดปุ่ม "บันทึกการตั้งค่า" (กันกรรมการเห็นค่าที่ยังแก้ไม่เสร็จ)
+  const [awardDraft, setAwardDraft] = useStoredState("kz_award_draft", {});
+  const saveAwardSettings = async (next) => {
+    setAward(next);
+    if (awardSync !== "sheet") return "local";
+    clearTimeout(awardTimer.current);
+    const ok = await saveAwardToSheet(next);
+    return ok ? "sheet" : "error";
+  };
+
   const changeAward = (next) => {
     setAward(next);
     if (awardSync === "sheet") {
@@ -3749,6 +4006,8 @@ export default function KaizenApp() {
     activeJudges(award).forEach((j) =>
       pushNotification(j.userName, `มี Kaizen ${count} เรื่อง รอท่านให้คะแนนใน ${award.roundName} (เมนู "ให้คะแนน")`, null)
     );
+
+  const noticeJudges = (message) => activeJudges(award).forEach((j) => pushNotification(j.userName, message, null));
 
   const judgeSubmitted = (judge) => {
     pushNotification("Admin", `${judge.userName} ส่งคะแนน ${award.roundName} เรียบร้อยแล้ว`, null);
@@ -4050,7 +4309,7 @@ export default function KaizenApp() {
               <div className="text-[10px]" style={{ color: "#9FB0C6" }}>{ROLE_LABEL[currentUser.role]}</div>
             </div>
             <button
-              onClick={() => { setCurrentUser(null); setTab("dashboard"); }}
+              onClick={() => { setCurrentUser(null); setTab("dashboard"); setAwardDraft({}); }}
               title="ออกจากระบบ"
               className="p-1.5 rounded-lg"
               style={{ color: "#C7D2E0" }}
@@ -4255,6 +4514,10 @@ export default function KaizenApp() {
             onChange={changeAward}
             onScore={scoreAward}
             onSendToJudges={sendToJudges}
+            onJudgesNotice={noticeJudges}
+            draft={awardDraft}
+            onDraftChange={setAwardDraft}
+            onSaveSettings={saveAwardSettings}
             onRefresh={loadAward}
             currentUser={currentUser}
             onView={setViewing}
