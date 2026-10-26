@@ -43,19 +43,53 @@ async function fetchKaizensFromSheet() {
   return res.json();
 }
 
-async function syncKaizenToSheet(action, record) {
+// ส่งข้อมูลไป Apps Script แล้วตรวจว่า "บันทึกสำเร็จจริง" (เซิร์ฟเวอร์ต้องตอบ success) ไม่ใช่แค่ส่งออกไปได้
+async function postToSheet(action, record) {
   try {
-    await fetch(GOOGLE_SHEETS_API_URL, {
+    const res = await fetch(GOOGLE_SHEETS_API_URL, {
       method: "POST",
-      // ใช้ text/plain เพื่อเลี่ยงปัญหา CORS preflight ของ Google Apps Script (ข้อจำกัดที่รู้กันของ Apps Script)
+      // ใช้ text/plain เพื่อเลี่ยงปัญหา CORS preflight ของ Google Apps Script
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, record: toSheetRecord(record) }),
+      body: JSON.stringify({ action, record }),
     });
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch (e) { /* ไม่ใช่ JSON (เช่น หน้า error ของ Apps Script) */ }
+    if (res.ok && json && json.success !== false) return { ok: true, error: "" };
+    const detail = json && json.error ? json.error : text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+    return { ok: false, error: res.ok ? detail || "เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง" : `HTTP ${res.status} ${detail}` };
   } catch (err) {
-    // คาดว่าจะ error ถ้าทดสอบอยู่ใน claude.ai artifact (ถูกบล็อกโดย sandbox)
-    // แต่จะทำงานได้ปกติเมื่อ deploy เป็นเว็บไซต์จริงแล้ว
-    console.warn("Sync to Google Sheet failed:", err.message);
+    return { ok: false, error: err.message || String(err) };
   }
+}
+
+// สถานะการบันทึก Kaizen ลง Google Sheet (แสดงมุมขวาล่าง เมื่อเชื่อมต่อ Google Sheet อยู่)
+const syncState = { pending: 0, failed: new Map(), tracking: false };
+const syncSubscribers = new Set();
+function emitSync() {
+  const snap = { pending: syncState.pending, failed: Array.from(syncState.failed.values()) };
+  syncSubscribers.forEach((fn) => fn(snap));
+}
+async function syncKaizenToSheet(action, record) {
+  const payload = toSheetRecord(record);
+  if (!syncState.tracking) {
+    // โหมดทดลอง/ยังไม่เชื่อมชีต: ส่งแบบเงียบๆ เหมือนเดิม (คาดว่าจะ error ถ้าทดสอบใน claude.ai artifact)
+    const r = await postToSheet(action, payload);
+    if (!r.ok) console.warn("Sync to Google Sheet failed:", r.error);
+    return r.ok;
+  }
+  syncState.pending += 1;
+  emitSync();
+  const r = await postToSheet(action, payload);
+  syncState.pending -= 1;
+  if (r.ok) syncState.failed.delete(record.id);
+  else syncState.failed.set(record.id, { id: record.id, title: record.title || record.registeredNo || record.id, record, error: r.error });
+  emitSync();
+  return r.ok;
+}
+// ลองบันทึกซ้ำ: ใช้ "update" เสมอ (ถ้ายังไม่มีแถวนี้ในชีต ระบบจะเพิ่มให้ ไม่ซ้ำ)
+function retryFailedSyncs() {
+  Array.from(syncState.failed.values()).forEach((f) => syncKaizenToSheet("update", f.record));
 }
 
 // ---------- Kaizen Award: บันทึก/โหลดเกณฑ์และคะแนน ----------
@@ -71,17 +105,18 @@ async function fetchAwardFromSheet() {
 }
 
 async function postAward(action, record) {
-  try {
-    const res = await fetch(GOOGLE_SHEETS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, record }),
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn("Save award failed:", err.message);
-    return false;
-  }
+  return (await postToSheet(action, record)).ok;
+}
+// รายชื่อผู้ใช้ที่ Admin จัดการ (เก็บในชีต KaizenUsers ผ่าน Users_Addon.gs)
+async function fetchUsersFromSheet() {
+  const res = await fetch(`${GOOGLE_SHEETS_API_URL}?type=users`);
+  if (!res.ok) throw new Error("users fetch failed");
+  const json = await res.json();
+  if (json && !Array.isArray(json) && Object.prototype.hasOwnProperty.call(json, "users")) return { supported: true, users: json.users };
+  return { supported: false, users: null }; // Code.gs ยังไม่ได้ติดตั้ง Users_Addon.gs
+}
+function saveUsersToSheet(list) {
+  return postAward("saveUsers", { id: "users", data: list });
 }
 // บันทึกเฉพาะ "เกณฑ์/กรรมการ/ผลประกาศ" (ไม่รวมคะแนน) เพื่อไม่ให้ไปทับคะแนนของกรรมการ
 function saveAwardToSheet(award) {
@@ -136,58 +171,102 @@ const DEFAULT_DEPARTMENTS = [
   "Procurement",
 ];
 
-// ---------- Mock directory (สาธิตเท่านั้น) ----------
-// อัปเดตจากไฟล์ BL_Kaizen_Person_Incharge.xlsx เวอร์ชันล่าสุด
-// Username = ชื่อผู้ใช้/ชื่อ-นามสกุล, Password = รหัสพนักงานตามไฟล์
-// พนักงาน 1 บัญชี อาจเลือกได้หลายหน่วยงานย่อยตามที่ไฟล์กำหนด (เช่น QC เลือกได้ทั้ง QC และ Lab)
-// ในระบบจริง ห้ามตรวจรหัสผ่านฝั่ง client แบบนี้เด็ดขาด ต้องยืนยันตัวตนผ่าน backend/SSO
-const MOCK_USERS = [
-  { name: "Production Planning & Data", empId: "1001", role: "employee", departments: ["Production Planning & Data"] },
-  { name: "Production_Line 1", empId: "1002", role: "employee", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1"] },
-  { name: "Production Line 2", empId: "1003", role: "employee", departments: ["Drying 2", "Packing 2", "RTE"] },
-  { name: "Production Line 3", empId: "1004", role: "employee", departments: ["Thread forming 3", "Packing 3"] },
-  { name: "Production Line 4", empId: "1005", role: "employee", departments: ["Thread forming _ RN", "Thread forming _ RV", "Cutting", "Drying 4", "Packing 4", "BS"] },
-  { name: "QC", empId: "1006", role: "employee", departments: ["QC", "Lab"] },
-  { name: "QA", empId: "1007", role: "employee", departments: ["QA", "Pest Control", "DC", "Sanitation"] },
-  { name: "RD", empId: "1008", role: "employee", departments: ["RD"] },
-  { name: "Engineering Data", empId: "1009", role: "employee", departments: ["Engineering Data"] },
-  { name: "Engineering Team A", empId: "1010", role: "employee", departments: ["Engineering Team A"] },
-  { name: "Engineering Team B", empId: "1011", role: "employee", departments: ["Engineering Team B"] },
-  { name: "Engineering Team C", empId: "1012", role: "employee", departments: ["Engineering Team C"] },
-  { name: "Boiler", empId: "1013", role: "employee", departments: ["Boiler"] },
-  { name: "Water supply", empId: "1014", role: "employee", departments: ["Water supply"] },
-  { name: "Finish Goods W/H (Dry)", empId: "1015", role: "employee", departments: ["Finish Goods W/H (Dry)"] },
-  { name: "Finish Goods W/H (Fresh)", empId: "1016", role: "employee", departments: ["Finish Goods W/H (Fresh)"] },
-  { name: "Raw Material W/H", empId: "1017", role: "employee", departments: ["Raw Material W/H"] },
-  { name: "Packaging W/H", empId: "1018", role: "employee", departments: ["Packaging W/H"] },
-  { name: "Spart part - Eguipment W/H", empId: "1019", role: "employee", departments: ["Spart part - Eguipment W/H"] },
-  { name: "Safety", empId: "1020", role: "employee", departments: ["Safety"] },
-  { name: "Envi", empId: "1021", role: "employee", departments: ["Envi"] },
-  { name: "C & B", empId: "1022", role: "employee", departments: ["C & B"] },
-  { name: "Recruitment & Training", empId: "1023", role: "employee", departments: ["Recruitment & Training"] },
-  { name: "ER & Admin", empId: "1024", role: "employee", departments: ["ER & Admin"] },
-  { name: "Admin", empId: "0001", role: "admin", departments: [] },
-  { name: "ผอ.โรงงาน", empId: "0002", role: "director", departments: [] },
-  // บัญชีคณะกรรมการ Kaizen Award (รหัสผ่านแยกกันคนละชุด เปลี่ยนได้ที่นี่)
-  { name: "กรรมการ 1", empId: "3001", role: "judge", departments: [] },
-  { name: "กรรมการ 2", empId: "3002", role: "judge", departments: [] },
-  { name: "กรรมการ 3", empId: "3003", role: "judge", departments: [] },
-  { name: "กรรมการ 4", empId: "3004", role: "judge", departments: [] },
-  { name: "กรรมการ 5", empId: "3005", role: "judge", departments: [] },
-  { name: "กรรมการ 6", empId: "3006", role: "judge", departments: [] },
-  { name: "กรรมการ 7", empId: "3007", role: "judge", departments: [] },
-
-  { name: "ทิพวรรณ บุญจิตติ", empId: "2001", role: "supervisor", departments: ["Production Planning & Data"] },
-  { name: "ธัญยธรณ์ สุขุมาลพันธ์", empId: "2002", role: "supervisor", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1", "Thread forming 3", "Packing 3"] },
-  { name: "ธันวา ปักษาสุข", empId: "2005", role: "supervisor", departments: ["Drying 2", "Packing 2", "RTE"] },
-  { name: "ศศิธร สระทองพูล", empId: "2010", role: "supervisor", departments: ["Thread forming _ RN", "Thread forming _ RV", "Cutting", "Drying 4", "Packing 4", "BS"] },
-  { name: "อมรรัตน์ ตุลาผล", empId: "2016", role: "supervisor", departments: ["QC", "QA", "Pest Control", "DC", "Sanitation", "Lab"] },
-  { name: "สุพิชชา วังถนอมศักดิ์", empId: "2021", role: "supervisor", departments: ["RD"] },
-  { name: "วินัย บุญมุนัส", empId: "2023", role: "supervisor", departments: ["Engineering Data", "Engineering Team A", "Engineering Team B", "Engineering Team C", "Boiler", "Water supply"] },
-  { name: "นันทวรรณ นวลเนตร", empId: "2029", role: "supervisor", departments: ["Finish Goods W/H (Dry)", "Finish Goods W/H (Fresh)", "Raw Material W/H", "Packaging W/H", "Spart part - Eguipment W/H"] },
-  { name: "วิไลวรรณ ขำขม", empId: "2034", role: "supervisor", departments: ["Safety", "Envi"] },
-  { name: "ติณณา พุทธสุข", empId: "2036", role: "supervisor", departments: ["C & B", "Recruitment & Training", "ER & Admin"] },
+// ---------- ทะเบียนผู้ใช้ ----------
+// รายชื่อเริ่มต้นด้านล่างเก็บรหัสผ่านเป็นค่าเข้ารหัส (PBKDF2-SHA256) ไม่มีรหัสผ่านจริงอยู่ในโค้ด
+// Admin เพิ่ม/แก้/ลบผู้ใช้ได้ที่เมนู "จัดการผู้ใช้" ถ้าเชื่อม Google Sheet และติดตั้ง Users_Addon.gs
+// รายชื่อที่ Admin แก้จะถูกเก็บในชีต "KaizenUsers" และใช้แทนรายการเริ่มต้นนี้
+// หมายเหตุ: ยังเป็นการตรวจรหัสผ่านฝั่งเบราว์เซอร์ ระบบจริงควรใช้ SSO/backend ของบริษัท
+// aliases = ชื่อบัญชีเดิม (ใช้ให้ Kaizen/การแจ้งเตือนที่เคยส่งด้วยชื่อเดิมยังแสดงในบัญชีที่เปลี่ยนชื่อ)
+const DEFAULT_USERS = [
+  { id: "u01", name: "Admin", role: "admin", departments: [], aliases: [], active: true, pw: { s: "50081db53d9e2f85d842cef08e725a60", h: "bb6eeebf05ed16a164bcdb603ecc00b82565c05596cbe1292fa0c44d809052aa" } },
+  { id: "u02", name: "ผอ.โรงงาน", role: "director", departments: [], aliases: [], active: true, pw: { s: "64153b2197fdd931365a3ca374226a63", h: "88df32eb05c800025f81b21a9b792911e6657c3238d59560894e144f71baaacd" } },
+  { id: "u03", name: "ทิพวรรณ บุญจิตติ", role: "supervisor", departments: ["Production Planning & Data"], aliases: [], active: true, pw: { s: "59377386718b60a30ed6af92277c3e15", h: "0ff8e98b96b2373f9307513b926e328414b5941b7cecc0c84525171027875ed3" } },
+  { id: "u04", name: "ธัญยธรณ์ สุขุมาลพันธ์", role: "supervisor", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1", "Thread forming 3", "Packing 3"], aliases: [], active: true, pw: { s: "5770f85f9254f3833c4fb4b1dd7d0de7", h: "d10b200eafdfdd48971398b471366d0b365988ac4d6d7fd56e1b5f4dd18ba748" } },
+  { id: "u05", name: "นรินทร์ คำนา", role: "supervisor", departments: ["Drying 2", "Packing 2", "RTE"], aliases: [], active: true, pw: { s: "756aeef5789bd7fef59e9558368fd74b", h: "4d33f66fb64f649002252ac65aa5302a0a0cde6999a1ef311881adeaf5f4623d" } },
+  { id: "u06", name: "นรินทร์ คำนา", role: "supervisor", departments: ["Thread forming _ RN", "Thread forming _ RV", "Cutting", "Drying 4", "Packing 4", "BS"], aliases: [], active: true, pw: { s: "fa738d8ad6c45efe52822c663c25da2f", h: "705e49a3b365e29f97fa0ffd30b1c77db97b346869da1b4d5474466b329513ee" } },
+  { id: "u07", name: "อมรรัตน์ ตุลาผล", role: "supervisor", departments: ["QA", "Pest Control", "DC", "Sanitation", "QC", "Lab"], aliases: [], active: true, pw: { s: "81544a85b51f683c1aa409114899cd35", h: "2fcf985546fe62b6196b1a15ea0b18f3eb6398fe4a490273ee2312408d616523" } },
+  { id: "u08", name: "สุพิชชา วังถนอมศักดิ์", role: "supervisor", departments: ["RD"], aliases: [], active: true, pw: { s: "3b0c94da06f5e1ccae0d68afbd3aea17", h: "995eefbb16b0531bb8ce41b9e88e08b248bb7c9bb2ed2dc1c10310dce6d00ba4" } },
+  { id: "u09", name: "วันัย บุญมุนัส", role: "supervisor", departments: ["Engineering Data", "Engineering Team A", "Engineering Team B", "Engineering Team C", "Boiler", "Water supply"], aliases: ["วินัย บุญมุนัส"], active: true, pw: { s: "d11925bd1c56d7eabf92c9cf9fce8c30", h: "c15c1b99a5f00559c4ffdc7bc7471a779060f0687be9255aa083d7ea2b610ad7" } },
+  { id: "u10", name: "นันทวรรณ นวลเนตร", role: "supervisor", departments: ["Raw Material W/H", "Finish Goods W/H (Dry)", "Finish Goods W/H (Fresh)", "Spart part - Eguipment W/H", "Packaging W/H"], aliases: [], active: true, pw: { s: "7f6991995984663879737317288a3a17", h: "c44bcda60a50952563e718640b47cf9d2d7e1951f39aa40b407ec29a05d96c09" } },
+  { id: "u11", name: "วิไลวรรณ ขำขม", role: "supervisor", departments: ["Safety", "Envi"], aliases: [], active: true, pw: { s: "5405918e401aa484797af6b5ddd58817", h: "05ea7dff51efa8144f11378c83df322e7941899b5c82bf25de790854df7a2a8a" } },
+  { id: "u12", name: "ติณณา พุทธสุข", role: "supervisor", departments: ["C & B", "Recruitment & Training", "ER & Admin"], aliases: [], active: true, pw: { s: "5fd1fe419fa48351b9615eaf0b16c9f7", h: "63204ea50fe6b99b1e5a3bb39cc01fe15a84522d55a1245db61fbc0f79ff3075" } },
+  { id: "u13", name: "Production Planning & Data", role: "employee", departments: ["Production Planning & Data"], aliases: [], active: true, pw: { s: "f4f3241a714931592f37180a09b68641", h: "835ecce80d72e384ec3d1c252a92143b2d868eee1eaf76dbbe6e7083219b4553" } },
+  { id: "u14", name: "Production 1", role: "employee", departments: ["Washing - Drying 1", "Thread forming 1", "Packing 1"], aliases: ["Production_Line 1"], active: true, pw: { s: "2bbe431cf612de4580e0adaff5803901", h: "a491415b78a7e17db02bfb625e4d4808efd64c9d7cff159d81fa907ca364dbd4" } },
+  { id: "u15", name: "Production 3", role: "employee", departments: ["Thread forming 3", "Packing 3"], aliases: ["Production Line 3"], active: true, pw: { s: "56f707780601649c01be4fb7232d408b", h: "acb925dec60443e84cc9aa673995c4ca4f17bdb441f63e390cb97e7a09883c3d" } },
+  { id: "u16", name: "Production 2", role: "employee", departments: ["Drying 2", "Packing 2", "RTE"], aliases: ["Production Line 2"], active: true, pw: { s: "66515446d5a300d9f7451d6ef33e87c2", h: "91bb0c985298706b1882c270d97fcc47d34bae7a1ef56a7abbb93cfc3b1bba88" } },
+  { id: "u17", name: "Production 4", role: "employee", departments: ["Thread forming _ RN", "Thread forming _ RV", "Cutting", "Drying 4", "Packing 4", "BS"], aliases: ["Production Line 4"], active: true, pw: { s: "5fb8c0cd48ed5ace7bef75c71fef9254", h: "6b02336dcc7a25d29f0216e1318c53f56cf5107af9ca4c9fd0620ea364fa35f0" } },
+  { id: "u18", name: "QC", role: "employee", departments: ["QC", "Lab"], aliases: [], active: true, pw: { s: "186443ca465a0e676054423be7683d7a", h: "e273431edd0049c20d8fb0015ba4ba671fd70b73aab92569d8134933c48ed76e" } },
+  { id: "u19", name: "QA", role: "employee", departments: ["QA", "Pest Control", "DC", "Sanitation"], aliases: [], active: true, pw: { s: "f4212404b5babc59bbd68629c72526a3", h: "0fe4d336591467e69acb224956ebf59847d6e805d338ed652fdcaf936e1735b8" } },
+  { id: "u20", name: "RD", role: "employee", departments: ["RD"], aliases: [], active: true, pw: { s: "e7c358c173a1053de3277fc26d7961ab", h: "14dcabf8f9f5db6b668c116625c3bff7375614f3b20d9301e03f1e24e008b85c" } },
+  { id: "u21", name: "Engineering Data", role: "employee", departments: ["Engineering Data"], aliases: [], active: true, pw: { s: "35c3e372699cc2f37d6ba0b31924d2aa", h: "3999ab199b479d8b27730f170ff957ab8acbc89c4b53c79b499e2de4c468fc26" } },
+  { id: "u22", name: "Engineering Team A", role: "employee", departments: ["Engineering Team A"], aliases: [], active: true, pw: { s: "24da189b0a09e93390ca1e794281fada", h: "3103bef797c6060187260c0fc7b8abb5fa568e632c87fbf2c6d058cc83d25034" } },
+  { id: "u23", name: "Engineering Team B", role: "employee", departments: ["Engineering Team B"], aliases: [], active: true, pw: { s: "5005e873d9f76bc62ddaa6831138aa8f", h: "9849fc0babaa1f2cc924e4f67650e6de8d096c1ce9f77b23bd3b6d2aa9d903ef" } },
+  { id: "u24", name: "Engineering Team C", role: "employee", departments: ["Engineering Team C"], aliases: [], active: true, pw: { s: "1bc87bed64754192b7c33d55b9b4917c", h: "81499c8ffff4ade108d85e545aa6175f8942b298252f90766463f0503e2b201e" } },
+  { id: "u25", name: "Water supply", role: "employee", departments: ["Boiler", "Water supply"], aliases: ["Boiler"], active: true, pw: { s: "b7eb42128e444dbb8d192f5ca198220a", h: "8f23ac3cfefb5991978e867bd98667a2b1491b6df835f3ac95d8813cb5c3625a" } },
+  { id: "u26", name: "Finish Goods W/H (Dry)", role: "employee", departments: ["Finish Goods W/H (Dry)"], aliases: [], active: true, pw: { s: "9f31ef3d51b4d73e6aa7978fd85b2d5b", h: "ac27e1df1cc4365d43c1959aa93658eff7102337bee0cfb71712e7b86146f776" } },
+  { id: "u27", name: "Finish Goods W/H (Fresh)", role: "employee", departments: ["Finish Goods W/H (Fresh)"], aliases: [], active: true, pw: { s: "ae67e4c8d8166fa62de250f2603eefc8", h: "6f397a5815fbd2cd58538ff25dcc9b082dbee64634c58ba606d6b991b889e55c" } },
+  { id: "u28", name: "Raw Material W/H", role: "employee", departments: ["Raw Material W/H"], aliases: [], active: true, pw: { s: "c91663a7bc15cc07630005626f4b2d47", h: "da5ab18e9d4e94061365a7eaa78911c69544fb27ba1bf9e97ea2275e93324aa9" } },
+  { id: "u29", name: "Packaging W/H", role: "employee", departments: ["Packaging W/H"], aliases: [], active: true, pw: { s: "649cea5b0176cce4ff53515a7a97bf61", h: "1f464a549da68ae99eaf9cb89321d3fbe1fbe73962f3d06a47e5f219e6a600a2" } },
+  { id: "u30", name: "Spart part - Eguipment W/H", role: "employee", departments: ["Spart part - Eguipment W/H"], aliases: [], active: true, pw: { s: "d11c4e85f233ca5cead71e7fb2a26cda", h: "2523c06d97dee8a9424e00f39bea27c0293092b66ecb6579218000845a5076d3" } },
+  { id: "u31", name: "Safety", role: "employee", departments: ["Safety"], aliases: [], active: true, pw: { s: "5423899366b1096d1b7e78864c432401", h: "d2412364918560739e6154e2b87eb05e74d3cf5425773cb976283c8d9f96b644" } },
+  { id: "u32", name: "Envi", role: "employee", departments: ["Envi"], aliases: [], active: true, pw: { s: "4382099fd7018720548cbf289fa26f3d", h: "cb1f558a0da4a8bfd11b9f41e6924dee9b3546efc0ef0112123c0d551e9b04f3" } },
+  { id: "u33", name: "C & B", role: "employee", departments: ["C & B"], aliases: [], active: true, pw: { s: "f854025d869d846d2e767a2731a5b599", h: "5af510031ac282c2ebbb3364fb13754da4d1effa54a66880fef24de4dd4d75bc" } },
+  { id: "u34", name: "Recruitment & Training", role: "employee", departments: ["Recruitment & Training"], aliases: [], active: true, pw: { s: "11e6fb7e46adafed8f39f56347c1592f", h: "03fe32a40160fcd501d61be03ffd5b95dcf955430191822403cb2407fdab64bf" } },
+  { id: "u35", name: "ER & Admin", role: "employee", departments: ["ER & Admin"], aliases: [], active: true, pw: { s: "db5ff6c83eb52a7e0ba831bba3e54951", h: "060d60f91357bb469dd86b0134f24772e4e0194537ce92b35d211293375afdc5" } },
+  { id: "u36", name: "กรรมการ 1", role: "judge", departments: [], aliases: [], active: true, pw: { s: "dd35b6aae8872510298215bf52bc7d4d", h: "9f560ea13927eec82318e4a70aa10cac09653d854d3f77c96047f13fe1f58dac" } },
+  { id: "u37", name: "กรรมการ 2", role: "judge", departments: [], aliases: [], active: true, pw: { s: "d58b20452b8b853ae2e5116e5ddc6a55", h: "7329bfbcdbd161c060eae62805c3541d7c9b492f4c82450823686f2504cbe5e7" } },
+  { id: "u38", name: "กรรมการ 3", role: "judge", departments: [], aliases: [], active: true, pw: { s: "b535e3398e15b90e555c8f5cca9aa67e", h: "37a102a5d2f80c97cfdc31e02ed4daa71a91b8ddd3cd24f483b17543d0a411ab" } },
+  { id: "u39", name: "กรรมการ 4", role: "judge", departments: [], aliases: [], active: true, pw: { s: "5e8dc07b8ae990c670c2a1eb931c23a5", h: "958c7993cdb4ab193362ef23ff2637a39951769dd971193a88187b10905d460b" } },
+  { id: "u40", name: "กรรมการ 5", role: "judge", departments: [], aliases: [], active: true, pw: { s: "4052c37e9481236f96c69ce528142e3d", h: "3e41024e10ec474904660929f22dbfe1b4bb042694bfcf72331b1f4dfe584c5e" } },
+  { id: "u41", name: "กรรมการ 6", role: "judge", departments: [], aliases: [], active: true, pw: { s: "80cebfa433ef0808feb98280c3e8c59e", h: "8e54af119600db342b532674f375c1cfda408f5f44b5fec677e2731146574e54" } },
+  { id: "u42", name: "กรรมการ 7", role: "judge", departments: [], aliases: [], active: true, pw: { s: "f0bc061d861d2b6021c49fc0f681e89b", h: "ddc52dddef424f0152e28a461c0ba19ad572f5de768b29ca311aa277a8f1fff3" } },
 ];
+
+// รายชื่อที่ใช้งานจริง (อัปเดตเมื่อโหลดจาก Google Sheet หรือ Admin แก้ไข)
+const USERS = DEFAULT_USERS.map((u) => ({ ...u }));
+
+const PBKDF2_ITERATIONS = 100000;
+const hexToBytes = (hex) => new Uint8Array((hex.match(/.{1,2}/g) || []).map((b) => parseInt(b, 16)));
+const bytesToHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+async function hashPassword(password, saltHex) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: hexToBytes(saltHex), iterations: PBKDF2_ITERATIONS }, key, 256);
+  return bytesToHex(bits);
+}
+async function makePw(password) {
+  const s = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+  return { s, h: await hashPassword(password, s) };
+}
+async function checkPw(user, password) {
+  if (!user || !user.pw || !user.pw.s || !user.pw.h) return false;
+  return (await hashPassword(password, user.pw.s)) === user.pw.h;
+}
+function randomPassword(len = 8) {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const arr = crypto.getRandomValues(new Uint32Array(len));
+  return Array.from(arr).map((n) => chars[n % chars.length]).join("");
+}
+const USER_ROLES = ["employee", "supervisor", "admin", "director", "judge"];
+const newUserId = () => `u_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+const normName = (n) => String(n || "").trim().toLowerCase();
+
+// ตรวจและเติมค่าที่ขาดของรายชื่อที่โหลดจาก Google Sheet (กันข้อมูลเสียทำให้เข้าระบบไม่ได้)
+function normalizeUsers(list) {
+  const out = (Array.isArray(list) ? list : [])
+    .filter((u) => u && u.id && String(u.name || "").trim() && USER_ROLES.includes(u.role) && u.pw && u.pw.s && u.pw.h)
+    .map((u) => ({
+      id: String(u.id), name: String(u.name).trim(), role: u.role,
+      departments: Array.isArray(u.departments) ? u.departments : [],
+      aliases: Array.isArray(u.aliases) ? u.aliases : [],
+      active: u.active !== false, pw: { s: u.pw.s, h: u.pw.h },
+    }));
+  // กรรมการ 1-7 ต้องมีเสมอ (ระบบประกวดอ้างอิงชื่อบัญชีเหล่านี้)
+  DEFAULT_USERS.filter((d) => d.role === "judge" && !out.some((u) => normName(u.name) === normName(d.name))).forEach((d) => out.push({ ...d }));
+  // ต้องมี Admin ที่ใช้งานได้อย่างน้อย 1 บัญชี ไม่เช่นนั้นกลับไปใช้รายชื่อเริ่มต้น
+  if (!out.some((u) => u.role === "admin" && u.active)) return DEFAULT_USERS.map((u) => ({ ...u }));
+  return out;
+}
+
 
 const ROLE_LABEL = { employee: "พนักงาน", supervisor: "หัวหน้างาน", admin: "Admin (ฝ่ายบุคคล)", director: "ผู้อำนวยการโรงงาน", judge: "กรรมการตัดสิน Kaizen Award" };
 
@@ -199,13 +278,13 @@ function buildInitialNotifications(kaizenList) {
   };
   kaizenList.forEach((k) => {
     if (k.status === "pending_supervisor") {
-      const sup = MOCK_USERS.find((u) => u.role === "supervisor" && u.departments.includes(k.department));
+      const sup = USERS.find((u) => u.role === "supervisor" && u.departments.includes(k.department));
       if (sup) push(sup.name, `มีเรื่อง Kaizen ใหม่รอคุณอนุมัติ: "${k.title}"`, k.id);
     } else if (k.status === "pending_admin") {
-      const admin = MOCK_USERS.find((u) => u.role === "admin");
+      const admin = USERS.find((u) => u.role === "admin");
       if (admin) push(admin.name, `มีเรื่อง Kaizen รอ Admin ตรวจสอบ: "${k.title}"`, k.id);
     } else if (k.status === "pending_director") {
-      const director = MOCK_USERS.find((u) => u.role === "director");
+      const director = USERS.find((u) => u.role === "director");
       if (director) push(director.name, `มีเรื่อง Kaizen รอผู้อำนวยการอนุมัติขั้นสุดท้าย: "${k.title}"`, k.id);
     }
   });
@@ -559,11 +638,13 @@ const fixName = (n) => NAME_FIX[n] || n;
 
 function normalizeKaizen(k) {
   const history = Array.isArray(k.history) ? k.history : [];
+  const atts = Array.isArray(k.attachments) ? k.attachments : [];
+  const photoAtt = (side) => atts.filter((a) => a && a.kind === "photo" && a.side === side).map((a) => a.dataUrl).filter(Boolean);
   return {
     ...k,
-    images: { before: asList(k.images?.before), after: asList(k.images?.after) },
+    images: { before: [...asList(k.images?.before), ...photoAtt("before")], after: [...asList(k.images?.after), ...photoAtt("after")] },
     categories: Array.isArray(k.categories) ? k.categories : [],
-    attachments: Array.isArray(k.attachments) ? k.attachments : [],
+    attachments: atts.filter((a) => !(a && a.kind === "photo")),
     members: Array.isArray(k.members) ? k.members : [],
     history: history.map((h) => ({ ...h, actor: fixName(h.actor) })),
     activityType: k.activityType || "Kaizen",
@@ -571,13 +652,18 @@ function normalizeKaizen(k) {
   };
 }
 
-// รูป 1 ใบส่งเป็นลิงก์ตรงๆ (ใช้ได้กับ Code.gs เดิม) หลายใบส่งเป็นรายการ (ต้องใช้ Code.gs ที่อัปเดตแล้ว)
+// รูปแรกของแต่ละด้านเก็บในช่องรูปเดิม (ลิงก์เดียว) ส่วนรูปที่ 2-10 เก็บเป็น "ไฟล์แนบชนิดรูป" (kind: "photo")
+// ทำให้ Code.gs เดิมรับได้ทุกรูปโดยไม่ต้องแก้ Code.gs (ส่งเป็นรายการในช่องรูปเดียว Code.gs เดิมจะบันทึกไม่ได้)
 function toSheetRecord(record) {
-  const out = (v) => {
-    const l = asList(v);
-    return l.length === 0 ? null : l.length === 1 ? l[0] : l;
+  const before = asList(record.images?.before);
+  const after = asList(record.images?.after);
+  const extra = (side, list) =>
+    list.slice(1).map((u, i) => ({ kind: "photo", side, name: `${record.id}_${side}_${i + 2}.jpg`, type: "image/jpeg", dataUrl: u }));
+  return {
+    ...record,
+    images: { before: before[0] || null, after: after[0] || null },
+    attachments: [...(record.attachments || []).filter((a) => !(a && a.kind === "photo")), ...extra("before", before), ...extra("after", after)],
   };
-  return { ...record, images: { before: out(record.images?.before), after: out(record.images?.after) } };
 }
 
 // Kaizen ที่นับเป็น "ยอดการส่ง Kaizen": หัวหน้างานอนุมัติแล้ว และประเภทกิจกรรม = Kaizen (ไม่นับ Suggestion)
@@ -837,27 +923,62 @@ function CategoryTags({ categories }) {
 }
 
 // ย่อรูปก่อนอัปโหลด (ด้านยาวสุด 1600px, JPEG) ให้บันทึกเร็วและไม่เปลืองพื้นที่ Google Drive
-function compressImage(file, maxSide = 1600, quality = 0.85) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = () => resolve(reader.result);
-      img.src = reader.result;
+const MAX_RAW_PHOTO_MB = 40;
+const isImageFile = (f) => (f.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(f.name || "");
+// ย่อรูปก่อนอัปโหลด: ด้านยาวสุด 1280px เป็น JPEG ถ้ายังใหญ่ ย่อซ้ำให้เล็กลง (กันข้อมูลที่ส่งใหญ่เกินจนบันทึกไม่ได้)
+// ถ้าอ่านรูปไม่ได้ จะแจ้ง error (ไม่ส่งไฟล์ดิบขึ้นไป)
+async function compressImage(file, maxSide = 1280, quality = 0.8) {
+  if (!isImageFile(file)) throw new Error("not-image");
+  if (file.size > MAX_RAW_PHOTO_MB * 1024 * 1024) throw new Error("too-large");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("decode"));
+      el.src = url;
+    });
+    const w0 = img.naturalWidth || img.width;
+    const h0 = img.naturalHeight || img.height;
+    if (!w0 || !h0) throw new Error("decode");
+    const render = (side, q) => {
+      const scale = Math.min(1, side / Math.max(w0, h0));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(w0 * scale));
+      canvas.height = Math.max(1, Math.round(h0 * scale));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", q);
     };
-    reader.readAsDataURL(file);
-  });
+    let out = render(maxSide, quality);
+    if (out.length > 450000) out = render(1024, 0.65);
+    if (out.length > 450000) out = render(800, 0.6);
+    if (out.length < 200) throw new Error("decode");
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+const describePhotoError = (file, err) => {
+  const n = `"${file.name}"`;
+  if (err && err.message === "too-large") return `${n} ใหญ่เกิน ${MAX_RAW_PHOTO_MB} MB`;
+  if (err && err.message === "not-image") return `${n} ไม่ใช่ไฟล์รูปภาพ`;
+  return `${n} อ่านรูปไม่ได้ (รองรับ JPG / PNG / WebP ไฟล์ HEIC จากบางเครื่องต้องแปลงเป็น JPG ก่อน หรือถ่ายรูปใหม่)`;
+};
+// รูปจาก Google Drive: ถ้าลิงก์แบบเดิมโหลดไม่ขึ้น ลองลิงก์สำรองให้อัตโนมัติ
+function onDriveImgError(e) {
+  const img = e.currentTarget;
+  const m = String(img.src).match(/[?&]id=([\w-]+)|\/d\/([\w-]+)/);
+  const id = m && (m[1] || m[2]);
+  if (!id) return;
+  const chain = [`https://lh3.googleusercontent.com/d/${id}=w1600`, `https://drive.google.com/thumbnail?id=${id}&sz=w1600`];
+  const step = Number(img.dataset.fb || 0);
+  if (step < chain.length) {
+    img.dataset.fb = String(step + 1);
+    img.src = chain[step];
+  }
 }
 
 function ImageBox({ label, src, onChange, editable, labelClassName, onZoom, boxClassName }) {
@@ -926,21 +1047,33 @@ function ImageBox({ label, src, onChange, editable, labelClassName, onZoom, boxC
 
 
 // ---------- รูปหลายภาพ (Before / After ได้สูงสุด 10 รูปต่อด้าน) ----------
-function PhotoGallery({ label, photos, onChange, editable, onZoom }) {
+function PhotoGallery({ label, photos, onChange, editable, onZoom, onBusyChange }) {
   const list = asList(photos);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [errors, setErrors] = useState([]);
+  const pendingRef = useRef(0);
   const addFiles = async (fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
-    const room = MAX_PHOTOS - list.length;
+    const room = MAX_PHOTOS - list.length - pendingRef.current;
     const take = files.slice(0, Math.max(0, room));
     setNotice(files.length > room ? `เพิ่มได้สูงสุด ${MAX_PHOTOS} รูปต่อด้าน ระบบรับเพิ่มให้ ${take.length} รูป` : "");
+    setErrors([]);
     if (!take.length) return;
+    pendingRef.current += take.length;
     setBusy(true);
-    const out = await Promise.all(take.map((f) => compressImage(f, 1280, 0.8)));
-    setBusy(false);
-    onChange([...list, ...out]);
+    if (onBusyChange) onBusyChange(true);
+    const settled = await Promise.allSettled(take.map((f) => compressImage(f)));
+    pendingRef.current -= take.length;
+    const ok = settled.filter((r) => r.status === "fulfilled").map((r) => r.value);
+    const bad = settled.map((r, i) => (r.status === "rejected" ? describePhotoError(take[i], r.reason) : null)).filter(Boolean);
+    if (ok.length) onChange((prev) => [...prev, ...ok].slice(0, MAX_PHOTOS));
+    setErrors(bad);
+    if (pendingRef.current <= 0) {
+      setBusy(false);
+      if (onBusyChange) onBusyChange(false);
+    }
   };
   return (
     <div>
@@ -963,11 +1096,12 @@ function PhotoGallery({ label, photos, onChange, editable, onZoom }) {
                 className="w-full h-full object-cover"
                 style={onZoom ? { cursor: "zoom-in" } : undefined}
                 onClick={onZoom ? () => onZoom(list, i) : undefined}
+                onError={onDriveImgError}
               />
               {editable && (
                 <button
                   type="button"
-                  onClick={() => onChange(list.filter((_, j) => j !== i))}
+                  onClick={() => onChange((prev) => prev.filter((_, j) => j !== i))}
                   title="ลบรูปนี้"
                   className="absolute top-1 right-1 bg-white shadow rounded-full p-0.5 border"
                   style={{ borderColor: "#D8DDE5" }}
@@ -997,6 +1131,7 @@ function PhotoGallery({ label, photos, onChange, editable, onZoom }) {
       )}
       {busy && <div className="text-[11px] mt-1" style={{ color: SUB }}>กำลังย่อขนาดรูป...</div>}
       {notice && <div className="text-[11px] mt-1" style={{ color: RED }}>{notice}</div>}
+      {errors.map((er, i) => <div key={i} className="text-[11px] mt-1" style={{ color: RED }}>{er}</div>)}
     </div>
   );
 }
@@ -1024,6 +1159,7 @@ function PhotoGrid({ label, photos, onZoom }) {
                 className="w-full h-full object-cover"
                 style={onZoom ? { cursor: "zoom-in" } : undefined}
                 onClick={onZoom ? () => onZoom(list, i) : undefined}
+                onError={onDriveImgError}
               />
             </div>
           ))}
@@ -1191,6 +1327,14 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
     }
   );
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  // อัปเดตรูปแบบ functional (กันรูปหายเมื่อแนบหลายด้านติดกัน) และรู้ว่ากำลังย่อรูปอยู่หรือไม่
+  const setImages = (side, v) =>
+    setF((x) => {
+      const cur = asList(x.images?.[side]);
+      return { ...x, images: { ...(x.images || {}), [side]: typeof v === "function" ? v(cur) : v } };
+    });
+  const [photoBusy, setPhotoBusy] = useState({ before: false, after: false });
+  const anyPhotoBusy = photoBusy.before || photoBusy.after;
   const [adminNote, setAdminNote] = useState("");
   const missing = adminMode ? missingInfo(f) : [];
 
@@ -1262,8 +1406,8 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <PhotoGallery label="ภาพก่อนปรับปรุง (Before)" photos={f.images?.before} editable onChange={(v) => set("images", { ...f.images, before: v })} />
-        <PhotoGallery label="ภาพหลังปรับปรุง (After)" photos={f.images?.after} editable onChange={(v) => set("images", { ...f.images, after: v })} />
+        <PhotoGallery label="ภาพก่อนปรับปรุง (Before)" photos={f.images?.before} editable onChange={(v) => setImages("before", v)} onBusyChange={(b) => setPhotoBusy((x) => ({ ...x, before: b }))} />
+        <PhotoGallery label="ภาพหลังปรับปรุง (After)" photos={f.images?.after} editable onChange={(v) => setImages("after", v)} onBusyChange={(b) => setPhotoBusy((x) => ({ ...x, after: b }))} />
       </div>
       <AttachmentList
         attachments={f.attachments || []}
@@ -1311,11 +1455,12 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
           </Field>
         </div>
       )}
+      {anyPhotoBusy && <div className="text-xs text-right" style={{ color: SUB }}>กำลังย่อขนาดรูป รอสักครู่ ปุ่มบันทึกจะกดได้เมื่อเสร็จ...</div>}
       {adminMode ? (
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
           <button
-            disabled={!f.title}
+            disabled={!f.title || anyPhotoBusy}
             onClick={() => onSave(f, adminNote)}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40 flex items-center gap-1.5"
             style={{ background: NAVY }}
@@ -1327,14 +1472,15 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
         <button
+          disabled={anyPhotoBusy}
           onClick={() => onSave(f, "draft")}
-          className="px-4 py-2 rounded-lg text-sm font-medium border"
+          className="px-4 py-2 rounded-lg text-sm font-medium border disabled:opacity-40"
           style={{ borderColor: NAVY, color: NAVY }}
         >
           บันทึกแบบร่าง
         </button>
         <button
-          disabled={!f.title || !f.problem || !f.improvement}
+          disabled={!f.title || !f.problem || !f.improvement || anyPhotoBusy}
           onClick={() => onSave(f, "pending_supervisor")}
           className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40"
           style={{ background: NAVY }}
@@ -1420,7 +1566,7 @@ function ImageLightbox({ photos, index, onClose, onIndex }) {
           </div>
         </>
       )}
-      <img src={list[index]} alt="ภาพขยาย" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={(e) => e.stopPropagation()} />
+      <img src={list[index]} alt="ภาพขยาย" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={(e) => e.stopPropagation()} onError={onDriveImgError} />
     </div>
   );
 }
@@ -1460,7 +1606,7 @@ function Timeline({ history }) {
           h.action === "reject" ? "ตีกลับ (ถึงพนักงาน)" :
           h.action === "return" ? `ส่งกลับไปยัง ${TARGET_LABEL[h.target] || h.target}` :
           h.action === "recall" ? "ถอนเรื่องกลับมาแก้ไข (แบบร่าง)" :
-          h.action === "edit" ? `แก้ไขข้อมูลโดย${{ admin: " Admin", supervisor: " หัวหน้างาน", director: " ผู้อำนวยการ" }[MOCK_USERS.find((u) => u.name === h.actor)?.role] || ""}` : "";
+          h.action === "edit" ? `แก้ไขข้อมูลโดย${{ admin: " Admin", supervisor: " หัวหน้างาน", director: " ผู้อำนวยการ" }[USERS.find((u) => u.name === h.actor)?.role] || ""}` : "";
         const [datePart, timePart] = (h.date || "").split(" ");
         return (
           <div key={i} className="flex gap-3">
@@ -2399,7 +2545,7 @@ const AUTO_SOURCES = {
   team: "Cross functional = 5, สมาชิก 5 คนขึ้นไป = 4, 3-4 คน = 3, อื่นๆ = 2",
 };
 
-// บัญชีกรรมการ (ชื่อผู้ใช้ตรงกับ MOCK_USERS ที่ role = "judge")
+// บัญชีกรรมการ (ชื่อผู้ใช้ตรงกับ USERS ที่ role = "judge")
 const MAX_JUDGES = 7;
 const JUDGE_SLOTS = Array.from({ length: MAX_JUDGES }, (_, i) => i + 1).map((n) => ({ id: `j${n}`, userName: `กรรมการ ${n}` }));
 const AUTO_LABELS = {
@@ -3055,14 +3201,14 @@ function AwardPage({ kaizens, award, onChange, onScore, currentUser, onView, onP
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {JUDGE_SLOTS.map((j, idx) => {
                 const active = idx < cfg.judgeCount;
-                const acct = MOCK_USERS.find((u) => u.name === j.userName);
+                const acct = USERS.find((u) => u.name === j.userName);
                 return (
                   <div key={j.id} className="rounded-lg border p-3" style={{ borderColor: active ? "#DCD3F5" : "#EEF0F3", background: active ? "#FBFAFF" : "#F7F8FA", opacity: active ? 1 : 0.55 }}>
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: active ? JUDGE_PURPLE : "#AEB6C2" }}>{idx + 1}</div>
                       <div className="flex-1">
                         <div className="text-sm font-semibold" style={{ color: INK }}>{j.userName}</div>
-                        <div className="text-[11px]" style={{ color: SUB }}>ชื่อผู้ใช้: {j.userName} · รหัสผ่าน: <span className="font-mono">{acct ? acct.empId : "-"}</span></div>
+                        <div className="text-[11px]" style={{ color: SUB }}>ชื่อผู้ใช้: {j.userName} · {acct ? "ตั้ง/เปลี่ยนรหัสผ่านที่เมนู จัดการผู้ใช้" : "ยังไม่มีบัญชี"}</div>
                       </div>
                       {!active && <span className="text-[10px]" style={{ color: SUB }}>ไม่ใช้รอบนี้</span>}
                     </div>
@@ -3780,19 +3926,468 @@ function JudgePage({ kaizens, award, currentUser, onScore, onView, onPresent, on
   );
 }
 
-function LoginScreen({ onLogin }) {
+// ================= จัดการผู้ใช้ (Admin) =================
+const USER_ROLE_ORDER = ["admin", "director", "supervisor", "employee", "judge"];
+const USER_ROLE_OPTIONS = [["employee", "พนักงาน (บัญชีหน่วยงาน)"], ["supervisor", "หัวหน้างาน"], ["admin", "Admin (ฝ่ายบุคคล)"], ["director", "ผู้อำนวยการโรงงาน"]];
+const ROLE_BADGE = {
+  admin: { bg: "#FDF3E1", color: "#8A5B14" }, director: { bg: "#FDF3E1", color: "#8A5B14" }, supervisor: { bg: "#EAF3FC", color: "#1D5FC9" },
+  employee: { bg: "#F1F3F6", color: "#5B6675" }, judge: { bg: "#F1ECFD", color: "#6A4BC9" },
+};
+
+function UserFormModal({ mode, original, users, departments, currentUser, focusPw, onClose, onSubmit }) {
+  const isNew = mode === "new";
+  const isJudge = original?.role === "judge";
+  const isSelf = !!original && original.id === currentUser.id;
+  const [f, setF] = useState(() => ({
+    name: original?.name || "", role: original?.role || "employee", departments: original?.departments || [],
+    active: original ? original.active !== false : true, pw: isNew ? randomPassword() : "",
+  }));
+  const [showPw, setShowPw] = useState(isNew);
+  const [errors, setErrors] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const needsDept = f.role === "employee" || f.role === "supervisor";
+  const set = (patch) => { setErrors([]); setF((x) => ({ ...x, ...patch })); };
+  const activeAdmins = users.filter((u) => u.role === "admin" && u.active !== false);
+  const allDepts = useMemo(() => Array.from(new Set([...(departments || []), ...f.departments])), [departments, f.departments]);
+  const groups = useMemo(() => {
+    const m = {};
+    allDepts.forEach((d) => { const sec = SECTION_MAP[d] || "อื่นๆ"; (m[sec] = m[sec] || []).push(d); });
+    return Object.entries(m);
+  }, [allDepts]);
+  const toggleDept = (d) => set({ departments: f.departments.includes(d) ? f.departments.filter((x) => x !== d) : [...f.departments, d] });
+  const toggleGroup = (list) => {
+    const all = list.every((d) => f.departments.includes(d));
+    set({ departments: all ? f.departments.filter((d) => !list.includes(d)) : Array.from(new Set([...f.departments, ...list])) });
+  };
+
+  const validate = () => {
+    const errs = [];
+    const name = f.name.trim();
+    if (!name) errs.push("กรุณาใส่ชื่อผู้ใช้");
+    if (name.length > 60) errs.push("ชื่อผู้ใช้ยาวเกินไป (ไม่เกิน 60 ตัวอักษร)");
+    const renamed = !original || normName(original.name) !== normName(name);
+    if (name && renamed && users.some((u) => u.id !== original?.id && normName(u.name) === normName(name))) errs.push(`ชื่อผู้ใช้ "${name}" ซ้ำกับบัญชีอื่น`);
+    if (needsDept && f.departments.length === 0) errs.push("กรุณาเลือกหน่วยงานที่ดูแลอย่างน้อย 1 หน่วยงาน");
+    if (f.role === "supervisor") {
+      f.departments.forEach((d) => {
+        const other = users.find((u) => u.id !== original?.id && u.role === "supervisor" && u.active !== false && u.departments.includes(d));
+        if (other) errs.push(`หน่วยงาน "${d}" มีหัวหน้างาน "${other.name}" ดูแลอยู่แล้ว (หน่วยงานหนึ่งมีหัวหน้างานได้ 1 บัญชี ย้ายออกจากบัญชีนั้นก่อน)`);
+      });
+    }
+    const pw = f.pw.trim();
+    if (isNew && !pw) errs.push("กรุณาตั้งรหัสผ่าน");
+    if (pw && pw.length < 4) errs.push("รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร");
+    if (original && original.role === "admin" && (f.role !== "admin" || !f.active) && activeAdmins.length <= 1) errs.push("ต้องมี Admin ที่ใช้งานได้อย่างน้อย 1 บัญชี");
+    return errs;
+  };
+
+  const submit = async () => {
+    const errs = validate();
+    if (errs.length) { setErrors(errs); return; }
+    setSaving(true);
+    const plain = f.pw.trim();
+    const pw = plain ? await makePw(plain) : original.pw;
+    const name = f.name.trim();
+    let aliases = [...(original?.aliases || [])];
+    if (original && normName(original.name) !== normName(name) && !aliases.some((a) => normName(a) === normName(original.name))) aliases.push(original.name);
+    aliases = aliases.filter((a) => normName(a) !== normName(name));
+    const user = { id: original?.id || newUserId(), name, role: f.role, departments: needsDept ? f.departments : [], aliases, active: f.active, pw };
+    await onSubmit(user, plain || null, isNew);
+    setSaving(false);
+  };
+
+  const strength = f.pw.trim().length === 0 ? null : f.pw.trim().length < 6 ? "สั้นและเดาง่าย แนะนำ 6 ตัวอักษรขึ้นไป ผสมตัวอักษรกับตัวเลข" : "ใช้ได้";
+  return (
+    <Modal title={isNew ? "เพิ่มผู้ใช้ใหม่" : `แก้ไขผู้ใช้: ${original.name}`} onClose={onClose} wide>
+      <div className="space-y-4">
+        {isJudge && (
+          <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "#F1ECFD", color: "#6A4BC9" }}>บัญชีกรรมการผูกกับระบบ Kaizen Award จึงเปลี่ยนชื่อ บทบาท หรือปิดใช้งานไม่ได้ ตั้งรหัสผ่านใหม่ได้เท่านั้น</div>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="ชื่อผู้ใช้ (ใช้พิมพ์ตอนเข้าสู่ระบบ)" required>
+            <TextInput value={f.name} disabled={isJudge} onChange={(e) => set({ name: e.target.value })} placeholder="เช่น ชื่อ-นามสกุล หรือชื่อหน่วยงาน" />
+          </Field>
+          <Field label="บทบาท" required>
+            <select className={inputCls} style={inputStyle} value={f.role} disabled={isJudge || isSelf} onChange={(e) => set({ role: e.target.value })}>
+              {isJudge ? <option value="judge">กรรมการ Kaizen Award</option> : USER_ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </Field>
+        </div>
+        {original && f.role === "employee" && normName(original.name) !== normName(f.name) && (
+          <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>เมื่อเปลี่ยนชื่อ ระบบเก็บชื่อเดิม "{original.name}" ไว้ให้ Kaizen ที่เคยส่งด้วยชื่อเดิมยังแสดงในบัญชีนี้</div>
+        )}
+        {needsDept && (
+          <div>
+            <div className="text-xs font-medium mb-1.5" style={{ color: SUB }}>
+              {f.role === "supervisor" ? "หน่วยงานที่ดูแล (อนุมัติเรื่องของหน่วยงานเหล่านี้)" : "หน่วยงานที่บัญชีนี้เลือกส่งเรื่องได้"} <span style={{ color: RED }}>*</span>
+              <span className="ml-2 font-normal" style={{ color: "#A3ABB8" }}>เลือกแล้ว {f.departments.length} หน่วยงาน</span>
+            </div>
+            <div className="rounded-lg border max-h-64 overflow-y-auto p-2 space-y-2" style={{ borderColor: "#D8DDE5" }}>
+              {groups.map(([sec, list]) => (
+                <div key={sec}>
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer" style={{ color: NAVY }}>
+                    <input type="checkbox" checked={list.every((d) => f.departments.includes(d))} onChange={() => toggleGroup(list)} /> {sec}
+                  </label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 pl-6 mt-1">
+                    {list.map((d) => (
+                      <label key={d} className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: INK }}>
+                        <input type="checkbox" checked={f.departments.includes(d)} onChange={() => toggleDept(d)} /> {d}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {(f.role === "admin" || f.role === "director") && (
+          <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#FDF3E1", color: "#8A5B14" }}>บทบาทนี้เห็นและจัดการได้ทุกหน่วยงาน ไม่ต้องเลือกหน่วยงาน {f.role === "admin" ? "(ผู้ใช้ Admin มีสิทธิ์สูง ควรให้เฉพาะเจ้าหน้าที่ฝ่ายบุคคล)" : ""}</div>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label={isNew ? "รหัสผ่าน" : "ตั้งรหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)"} required={isNew}>
+            <div className="flex gap-2">
+              <input autoFocus={!!focusPw} type={showPw ? "text" : "password"} value={f.pw} onChange={(e) => set({ pw: e.target.value })} className={inputCls + " font-mono"} style={inputStyle} autoComplete="new-password" placeholder={isNew ? "" : "ไม่เปลี่ยนรหัสผ่าน"} />
+              <button type="button" onClick={() => setShowPw((v) => !v)} className="px-2.5 rounded-lg border text-xs whitespace-nowrap" style={{ borderColor: "#D8DDE5", color: SUB }}>{showPw ? "ซ่อน" : "แสดง"}</button>
+              <button type="button" onClick={() => { set({ pw: randomPassword() }); setShowPw(true); }} className="px-2.5 rounded-lg border text-xs whitespace-nowrap" style={{ borderColor: NAVY, color: NAVY }}>สุ่มรหัส</button>
+            </div>
+            {strength && <div className="text-[11px] mt-1" style={{ color: strength === "ใช้ได้" ? GREEN : "#8A5B14" }}>{strength}</div>}
+          </Field>
+          <Field label="สถานะบัญชี">
+            <label className="flex items-center gap-2 text-sm pt-2" style={{ color: INK, opacity: isJudge || isSelf ? 0.6 : 1 }}>
+              <input type="checkbox" checked={f.active} disabled={isJudge || isSelf} onChange={(e) => set({ active: e.target.checked })} /> เปิดใช้งาน (ถ้าปิด จะเข้าสู่ระบบไม่ได้)
+            </label>
+            {isSelf && <div className="text-[11px]" style={{ color: SUB }}>ปิดบัญชีของตัวเองหรือเปลี่ยนบทบาทตัวเองไม่ได้</div>}
+          </Field>
+        </div>
+        <div className="text-[11px]" style={{ color: SUB }}>ระบบเก็บรหัสผ่านแบบเข้ารหัส ไม่สามารถเปิดดูย้อนหลังได้ ถ้าลืม ให้กด "ตั้งรหัสใหม่" แล้วแจ้งรหัสใหม่ให้ผู้ใช้ จดรหัสที่ตั้งไว้ก่อนกดบันทึก</div>
+        {errors.length > 0 && (
+          <div className="rounded-lg px-3 py-2 text-xs space-y-0.5" style={{ background: "#FBEAE8", color: "#8B2E24" }}>
+            {errors.map((e, i) => <div key={i} className="flex gap-1.5"><AlertTriangle size={13} className="mt-0.5 flex-shrink-0" /> {e}</div>)}
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+          <button onClick={submit} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-60" style={{ background: GREEN }}>
+            <CheckCircle2 size={16} /> {saving ? "กำลังบันทึก..." : isNew ? "เพิ่มผู้ใช้" : "บันทึกการแก้ไข"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function MiniBtn({ icon: Icon, label, onClick, color }) {
+  return (
+    <button type="button" title={label} aria-label={label} onClick={onClick} className="p-1.5 rounded-lg border bg-white hover:bg-slate-50" style={{ borderColor: "#E2E6EB", color }}>
+      <Icon size={15} />
+    </button>
+  );
+}
+
+function UserManager({ users, kaizens, departments, currentUser, onSave, syncMode }) {
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [editor, setEditor] = useState(null); // { mode: "new" | "edit", user }
+  const [deleting, setDeleting] = useState(null);
+  const [notice, setNotice] = useState(null); // { type, text, secret? }
+  const [unsaved, setUnsaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const activeAdmins = users.filter((u) => u.role === "admin" && u.active !== false);
+  const dupNames = useMemo(() => {
+    const c = {};
+    users.forEach((u) => { c[normName(u.name)] = (c[normName(u.name)] || 0) + 1; });
+    return c;
+  }, [users]);
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return users
+      .filter((u) => (roleFilter === "all" || u.role === roleFilter) && (!q || u.name.toLowerCase().includes(q) || u.departments.some((d) => d.toLowerCase().includes(q)) || (u.aliases || []).some((a) => a.toLowerCase().includes(q))))
+      .sort((a, b) => USER_ROLE_ORDER.indexOf(a.role) - USER_ROLE_ORDER.indexOf(b.role));
+  }, [users, query, roleFilter]);
+  const activeCount = users.filter((u) => u.active !== false).length;
+
+  const persist = async (list, okText, secret) => {
+    setBusy(true);
+    setCopied(false);
+    const r = await onSave(list);
+    setBusy(false);
+    if (r === "error") {
+      setUnsaved(true);
+      setNotice({ type: "error", text: "ใช้งานได้ในหน้านี้แล้ว แต่บันทึกลง Google Sheet ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกด \"ลองบันทึกอีกครั้ง\"", secret });
+      return;
+    }
+    setUnsaved(false);
+    setNotice({ type: "ok", text: r === "sheet" ? `${okText} · บันทึกลง Google Sheet แล้ว` : `${okText} · โหมดทดลอง: เก็บไว้เฉพาะในหน้านี้ จะหายเมื่อรีเฟรช ติดตั้ง Users_Addon.gs เพื่อบันทึกถาวร`, secret });
+  };
+  const submitUser = async (user, plain, isNew) => {
+    const list = isNew ? [...users, user] : users.map((u) => (u.id === user.id ? user : u));
+    setEditor(null);
+    await persist(list, isNew ? `เพิ่มผู้ใช้ "${user.name}" แล้ว` : `แก้ไขผู้ใช้ "${user.name}" แล้ว`, plain ? { name: user.name, password: plain } : null);
+  };
+  const toggleActive = (u) => persist(users.map((x) => (x.id === u.id ? { ...x, active: x.active === false } : x)), u.active === false ? `เปิดใช้งาน "${u.name}" แล้ว` : `ปิดใช้งาน "${u.name}" แล้ว (เข้าสู่ระบบไม่ได้)`, null);
+  const confirmDelete = async () => {
+    const u = deleting;
+    setDeleting(null);
+    await persist(users.filter((x) => x.id !== u.id), `ลบผู้ใช้ "${u.name}" แล้ว`, null);
+  };
+  const lockedReason = (u, forDelete) => {
+    if (u.id === currentUser.id) return "บัญชีของท่าน";
+    if (u.role === "judge") return "บัญชีกรรมการ";
+    if (u.role === "admin" && u.active !== false && activeAdmins.length <= 1) return "Admin คนสุดท้าย";
+    return "";
+  };
+  const exportUsers = () => {
+    const rows = users.map((u) => ({
+      ชื่อผู้ใช้: u.name, บทบาท: ROLE_LABEL[u.role],
+      ฝ่าย: u.role === "admin" || u.role === "director" ? "ทุกฝ่าย" : Array.from(new Set(u.departments.map((d) => SECTION_MAP[d]).filter(Boolean))).join(", ") || "-",
+      หน่วยงาน: u.role === "admin" || u.role === "director" ? "ทุกหน่วยงาน" : u.departments.join(", ") || "-",
+      สถานะ: u.active === false ? "ปิดใช้งาน" : "ใช้งาน", ชื่อเดิม: (u.aliases || []).join(", "),
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "ผู้ใช้");
+    XLSX.writeFile(wb, `Kaizen_Users_${todayISO()}.xlsx`);
+  };
+  const copySecret = async () => {
+    try {
+      await navigator.clipboard.writeText(notice.secret.password);
+      setCopied(true);
+    } catch (e) {
+      setCopied(false);
+    }
+  };
+
+  const delCount = (u) => {
+    const names = [u.name, ...(u.aliases || [])];
+    return {
+      submitted: kaizens.filter((k) => names.includes(k.submittedBy)).length,
+      pending: u.role === "supervisor" ? kaizens.filter((k) => k.status === "pending_supervisor" && u.departments.includes(k.department)).length : 0,
+    };
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl p-4 md:p-5 flex items-center justify-between gap-3 flex-wrap" style={{ background: `linear-gradient(135deg, ${NAVY_DEEP}, ${NAVY})` }}>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: GOLD }}><Users size={22} color={NAVY_DEEP} /></div>
+          <div>
+            <div className="text-white text-lg font-semibold">จัดการผู้ใช้</div>
+            <div className="text-xs" style={{ color: "#AFC0D6" }}>ทั้งหมด {users.length} บัญชี · ใช้งาน {activeCount} · ปิดใช้งาน {users.length - activeCount}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] px-2.5 py-1 rounded-full" style={syncMode === "sheet" ? { background: "#E9F5EF", color: GREEN } : { background: "#FDF3E1", color: "#8A5B14" }}>
+            {syncMode === "sheet" ? "บันทึกลง Google Sheet" : "โหมดทดลอง: หายเมื่อรีเฟรช"}
+          </span>
+          <button onClick={exportUsers} className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 text-white" style={{ borderColor: "#5D7699" }}><FileSpreadsheet size={14} /> Export (ไม่รวมรหัสผ่าน)</button>
+          <button onClick={() => setEditor({ mode: "new" })} className="px-3.5 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5" style={{ background: GOLD, color: NAVY_DEEP }}><Plus size={16} /> เพิ่มผู้ใช้</button>
+        </div>
+      </div>
+
+      {notice && (
+        <div className="rounded-xl border p-3.5 space-y-2" style={notice.type === "ok" ? { background: "#E9F5EF", borderColor: "#A9D6BF" } : { background: "#FBEAE8", borderColor: "#F0C3BD" }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-sm" style={{ color: notice.type === "ok" ? "#1E5A40" : "#8B2E24" }}>{notice.text}</div>
+            <button onClick={() => setNotice(null)} className="p-0.5"><X size={15} style={{ color: SUB }} /></button>
+          </div>
+          {notice.secret && (
+            <div className="rounded-lg bg-white border p-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "#D8DDE5" }}>
+              <div className="text-sm" style={{ color: INK }}>
+                รหัสผ่านของ <strong>{notice.secret.name}</strong> คือ <span className="font-mono font-bold px-2 py-0.5 rounded" style={{ background: "#F4F6F8" }}>{notice.secret.password}</span>
+                <div className="text-[11px]" style={{ color: SUB }}>ระบบไม่แสดงรหัสนี้อีก จดหรือคัดลอกเก็บไว้แล้วแจ้งผู้ใช้เป็นข้อความส่วนตัว</div>
+              </div>
+              <button onClick={copySecret} className="text-xs px-3 py-1.5 rounded-lg border font-medium" style={{ borderColor: NAVY, color: NAVY }}>{copied ? "คัดลอกแล้ว ✓" : "คัดลอกรหัส"}</button>
+            </div>
+          )}
+        </div>
+      )}
+      {unsaved && (
+        <div className="rounded-xl border p-3 flex items-center justify-between gap-3 flex-wrap" style={{ background: "#FDF3E1", borderColor: "#E8C77E" }}>
+          <div className="text-sm" style={{ color: "#6B4A10" }}>มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึกลง Google Sheet (ถ้ารีเฟรชตอนนี้ การเปลี่ยนแปลงจะหาย)</div>
+          <button disabled={busy} onClick={() => persist(users, "บันทึกรายชื่อผู้ใช้", null)} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: GREEN }}>{busy ? "กำลังบันทึก..." : "ลองบันทึกอีกครั้ง"}</button>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border p-4 space-y-3" style={{ borderColor: "#E3E7ED" }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "#AEB6C2" }} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อผู้ใช้ / หน่วยงาน" className="rounded-lg border pl-8 pr-3 py-1.5 text-sm w-64 outline-none" style={{ borderColor: "#D8DDE5", color: INK }} />
+          </div>
+          {[["all", "ทั้งหมด"], ...USER_ROLE_ORDER.map((r) => [r, ROLE_LABEL[r].replace(" (ฝ่ายบุคคล)", "").replace("กรรมการตัดสิน Kaizen Award", "กรรมการ")])].map(([key, label]) => (
+            <button key={key} onClick={() => setRoleFilter(key)} className="text-xs px-3 py-1.5 rounded-full border font-medium" style={roleFilter === key ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: SUB }}>
+              {label} ({key === "all" ? users.length : users.filter((u) => u.role === key).length})
+            </button>
+          ))}
+        </div>
+        <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "#E2E6EB" }}>
+          <table className="w-full text-sm" style={{ minWidth: 820 }}>
+            <thead>
+              <tr style={{ background: "#FAFBFC" }}>
+                {["ชื่อผู้ใช้", "บทบาท", "หน่วยงานที่ดูแล", "สถานะ", "จัดการ"].map((h, i) => (
+                  <th key={h} className={`px-4 py-2.5 font-medium ${i === 4 ? "text-right" : "text-left"}`} style={{ color: SUB }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shown.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-sm" style={{ color: SUB }}>ไม่พบผู้ใช้ตามเงื่อนไข</td></tr>}
+              {shown.map((u) => {
+                const locked = lockedReason(u);
+                const badge = ROLE_BADGE[u.role];
+                const deptText = u.role === "admin" || u.role === "director" ? "ทุกหน่วยงาน" : u.departments.length ? u.departments.join(", ") : "-";
+                return (
+                  <tr key={u.id} className="border-t" style={{ borderColor: "#EEF0F3", opacity: u.active === false ? 0.55 : 1 }}>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium" style={{ color: INK }}>{u.name}{u.id === currentUser.id && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>บัญชีของท่าน</span>}</div>
+                      {(u.aliases || []).length > 0 && <div className="text-[11px]" style={{ color: "#A3ABB8" }}>ชื่อเดิม: {u.aliases.join(", ")}</div>}
+                      {dupNames[normName(u.name)] > 1 && <div className="text-[11px]" style={{ color: "#8A5B14" }}>ชื่อซ้ำกับอีกบัญชี (แยกด้วยรหัสผ่าน)</div>}
+                    </td>
+                    <td className="px-4 py-2.5"><span className="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: badge.bg, color: badge.color }}>{ROLE_LABEL[u.role]}</span></td>
+                    <td className="px-4 py-2.5 text-xs max-w-[380px]" style={{ color: SUB }} title={deptText}>
+                      <div style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{deptText}</div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap" style={u.active === false ? { background: "#F1F3F6", color: "#8A93A3" } : { background: "#E9F5EF", color: GREEN }}>{u.active === false ? "ปิดใช้งาน" : "ใช้งาน"}</span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex justify-end items-center gap-1.5">
+                        <MiniBtn icon={Pencil} label="แก้ไข" onClick={() => setEditor({ mode: "edit", user: u })} color="#6A4BC9" />
+                        <MiniBtn icon={KeyRound} label="ตั้งรหัสใหม่" onClick={() => setEditor({ mode: "edit", user: u, focusPw: true })} color={NAVY} />
+                        {!locked && <MiniBtn icon={u.active === false ? CheckCircle2 : Lock} label={u.active === false ? "เปิดใช้งาน" : "ปิดใช้งาน"} onClick={() => toggleActive(u)} color={u.active === false ? GREEN : "#8A5B14"} />}
+                        {!locked && <MiniBtn icon={Trash2} label="ลบ" onClick={() => setDeleting(u)} color={RED} />}
+                        {locked && <span className="text-[10px] self-center px-1" style={{ color: "#A3ABB8" }} title={`ปิดใช้งาน/ลบไม่ได้: ${locked}`}>ล็อก: {locked}</span>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="text-[11px]" style={{ color: SUB }}>
+          เปลี่ยนชื่อบัญชีพนักงานได้ ระบบเก็บชื่อเดิมไว้ให้ Kaizen เดิมยังแสดงเหมือนเดิม · ปิดใช้งานแทนการลบ จะเก็บบัญชีไว้และเปิดใช้ใหม่ได้ · Admin ต้องมีอย่างน้อย 1 บัญชีที่ใช้งานได้เสมอ
+        </div>
+      </div>
+
+      {editor && (
+        <UserFormModal
+          key={editor.user?.id || "new"}
+          mode={editor.mode}
+          original={editor.user}
+          users={users}
+          departments={departments}
+          currentUser={currentUser}
+          focusPw={editor.focusPw}
+          onClose={() => setEditor(null)}
+          onSubmit={submitUser}
+        />
+      )}
+      {deleting && (() => {
+        const c = delCount(deleting);
+        return (
+          <Modal title={`ลบผู้ใช้: ${deleting.name}`} onClose={() => setDeleting(null)}>
+            <div className="space-y-3">
+              <div className="text-sm" style={{ color: INK }}>ต้องการลบบัญชีนี้ถาวรใช่หรือไม่ ผู้ใช้จะเข้าสู่ระบบไม่ได้อีก</div>
+              {c.submitted > 0 && <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#FDF3E1", color: "#6B4A10" }}>บัญชีนี้เคยส่ง Kaizen {c.submitted} เรื่อง Kaizen ยังอยู่ในระบบตามเดิม แต่ไม่มีบัญชีนี้ให้เข้ามาดูหรือแก้ไข แนะนำให้ "ปิดใช้งาน" แทน</div>}
+              {c.pending > 0 && <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#FBEAE8", color: "#8B2E24" }}>มี Kaizen {c.pending} เรื่องที่รอหัวหน้างานคนนี้อนุมัติ หลังลบจะไม่มีใครอนุมัติเรื่องเหล่านั้นจนกว่าจะเพิ่มหัวหน้างานของหน่วยงานนั้น</div>}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setDeleting(null)} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+                <button onClick={confirmDelete} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5" style={{ background: RED }}><Trash2 size={15} /> ยืนยันลบ</button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
+    </div>
+  );
+}
+
+function SyncStatusBar() {
+  const [snap, setSnap] = useState({ pending: 0, failed: [] });
+  const [flash, setFlash] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const prevPending = useRef(0);
+  useEffect(() => {
+    const fn = (x) => { setSnap(x); if (x.failed.length) setHidden(false); };
+    syncSubscribers.add(fn);
+    return () => syncSubscribers.delete(fn);
+  }, []);
+  useEffect(() => {
+    let timer;
+    if (prevPending.current > 0 && snap.pending === 0 && snap.failed.length === 0) {
+      setFlash(true);
+      timer = setTimeout(() => setFlash(false), 3500);
+    }
+    prevPending.current = snap.pending;
+    return () => clearTimeout(timer);
+  }, [snap.pending, snap.failed.length]);
+  // ปิดหน้าเว็บระหว่างกำลังบันทึก รูปอาจหาย จึงเตือนก่อน
+  useEffect(() => {
+    const h = (e) => {
+      if (snap.pending > 0 || snap.failed.length > 0) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [snap.pending, snap.failed.length]);
+  if (snap.pending > 0) {
+    return (
+      <div className="fixed bottom-4 right-4 z-[70] rounded-xl border px-4 py-3 text-sm shadow-xl bg-white" style={{ borderColor: "#B9D2F0", color: INK }}>
+        กำลังบันทึกลง Google Sheet ({snap.pending} รายการ) กรุณาอย่าปิดหน้านี้...
+        <div className="text-[11px]" style={{ color: SUB }}>ถ้าแนบรูปหลายใบ อาจใช้เวลาครู่หนึ่ง</div>
+      </div>
+    );
+  }
+  if (snap.failed.length > 0 && !hidden) {
+    return (
+      <div className="fixed bottom-4 right-4 z-[70] w-96 max-w-[92vw] rounded-xl border p-4 shadow-xl" style={{ background: "#FBEAE8", borderColor: "#F0C3BD" }}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="text-sm font-semibold" style={{ color: "#8B2E24" }}>บันทึกลง Google Sheet ไม่สำเร็จ {snap.failed.length} เรื่อง</div>
+          <button onClick={() => setHidden(true)} className="p-0.5" title="ซ่อน"><X size={15} style={{ color: SUB }} /></button>
+        </div>
+        <div className="text-xs mt-1 space-y-1" style={{ color: INK }}>
+          {snap.failed.slice(0, 3).map((f) => (
+            <div key={f.id}>• {f.title}<div className="text-[11px] break-words" style={{ color: "#8B2E24" }}>สาเหตุ: {f.error}</div></div>
+          ))}
+          {snap.failed.length > 3 && <div>และอีก {snap.failed.length - 3} เรื่อง</div>}
+        </div>
+        <div className="text-[11px] mt-2" style={{ color: SUB }}>ข้อมูลยังอยู่ในหน้านี้ แต่ถ้ารีเฟรชตอนนี้จะหาย กดลองใหม่ได้เลย</div>
+        <div className="mt-2 flex justify-end">
+          <button onClick={retryFailedSyncs} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white" style={{ background: GREEN }}>ลองบันทึกอีกครั้ง</button>
+        </div>
+      </div>
+    );
+  }
+  if (flash) {
+    return <div className="fixed bottom-4 right-4 z-[70] rounded-xl border px-4 py-2.5 text-sm shadow-xl" style={{ background: "#E9F5EF", borderColor: "#A9D6BF", color: "#1E5A40" }}>บันทึกลง Google Sheet เรียบร้อยแล้ว ✓</div>;
+  }
+  return null;
+}
+
+function LoginScreen({ onLogin, users, ready }) {
   const [name, setName] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
-  const [showDemo, setShowDemo] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [lockedUntil, setLockedUntil] = useState(0);
+  const failsRef = useRef(0);
   const [open, setOpen] = useState(false);
   const passRef = useRef(null);
 
   const filteredUsers = useMemo(() => {
     const q = name.trim().toLowerCase();
-    const list = q ? MOCK_USERS.filter((u) => u.name.toLowerCase().includes(q)) : MOCK_USERS;
-    return list.slice(0, 30);
-  }, [name]);
+    const base = users.filter((u) => u.active !== false);
+    const matched = q ? base.filter((u) => u.name.toLowerCase().includes(q)) : base;
+    const seen = new Set();
+    return matched
+      .filter((u) => {
+        const key = normName(u.name);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((u) => ({ ...u, sameName: base.filter((x) => normName(x.name) === normName(u.name)).length }))
+      .slice(0, 30);
+  }, [name, users]);
 
   const selectUser = (u) => {
     setName(u.name);
@@ -3801,16 +4396,49 @@ function LoginScreen({ onLogin }) {
     if (passRef.current) passRef.current.focus();
   };
 
-  const submit = () => {
-    const user = MOCK_USERS.find(
-      (u) => u.name.trim().toLowerCase() === name.trim().toLowerCase()
-    );
-    if (!user || user.empId !== pass.trim()) {
-      setError("ชื่อผู้ใช้หรือรหัสพนักงานไม่ถูกต้อง");
+  const submit = async () => {
+    if (busy || !ready) return;
+    if (Date.now() < lockedUntil) {
+      setError(`กรอกรหัสผิดหลายครั้ง กรุณารอ ${Math.ceil((lockedUntil - Date.now()) / 1000)} วินาทีแล้วลองใหม่`);
       return;
     }
-    setError("");
-    onLogin(user);
+    const q = normName(name);
+    const candidates = users.filter((u) => normName(u.name) === q);
+    if (!candidates.length || !pass) {
+      setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+      return;
+    }
+    setBusy(true);
+    let found = null;
+    let inactive = false;
+    try {
+      for (const u of candidates) {
+        if (await checkPw(u, pass.trim())) {
+          if (u.active === false) inactive = true;
+          else found = u;
+          break;
+        }
+      }
+    } catch (e) {
+      setBusy(false);
+      setError("เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดเว็บผ่านลิงก์ https");
+      return;
+    }
+    setBusy(false);
+    if (found) {
+      failsRef.current = 0;
+      setError("");
+      onLogin(found);
+      return;
+    }
+    failsRef.current += 1;
+    if (failsRef.current >= 5) {
+      failsRef.current = 0;
+      setLockedUntil(Date.now() + 30000);
+      setError("กรอกรหัสผิดหลายครั้ง กรุณารอ 30 วินาทีแล้วลองใหม่");
+      return;
+    }
+    setError(inactive ? "บัญชีนี้ถูกปิดการใช้งาน กรุณาติดต่อ Admin" : "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
   };
   const handleKeyDown = (e) => {
     if (e.key === "Enter") submit();
@@ -3853,12 +4481,13 @@ function LoginScreen({ onLogin }) {
                   )}
                   {filteredUsers.map((u) => {
                     const deptText =
+                      u.sameName > 1 ? `มี ${u.sameName} บัญชีใช้ชื่อนี้ (แยกด้วยรหัสผ่าน)` :
                       u.departments.length === 0 ? "" :
                       u.departments.length <= 2 ? u.departments.join(", ") :
                       `${u.departments.slice(0, 2).join(", ")} และอีก ${u.departments.length - 2} หน่วยงาน`;
                     return (
                       <div
-                        key={u.empId}
+                        key={u.id}
                         onMouseDown={(e) => { e.preventDefault(); selectUser(u); }}
                         className="px-3 py-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0"
                         style={{ borderColor: "#F2F4F7" }}
@@ -3875,10 +4504,10 @@ function LoginScreen({ onLogin }) {
               )}
             </div>
           </Field>
-          <Field label="รหัสผ่าน (รหัสพนักงาน)" required>
+          <Field label="รหัสผ่าน" required>
             <div className="relative">
               <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#AEB6C2" }} />
-              <input ref={passRef} type="password" value={pass} onChange={(e) => setPass(e.target.value)} onFocus={() => setOpen(false)} onKeyDown={handleKeyDown} className={inputCls} style={{ ...inputStyle, paddingLeft: 32 }} placeholder="เช่น 1001" />
+              <input ref={passRef} type="password" value={pass} onChange={(e) => setPass(e.target.value)} onFocus={() => setOpen(false)} onKeyDown={handleKeyDown} className={inputCls} style={{ ...inputStyle, paddingLeft: 32 }} placeholder="รหัสผ่านของท่าน" autoComplete="current-password" />
             </div>
           </Field>
           {error && (
@@ -3886,24 +4515,13 @@ function LoginScreen({ onLogin }) {
               <AlertTriangle size={13} /> {error}
             </div>
           )}
-          <button type="button" onClick={submit} className="w-full py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-1.5" style={{ background: NAVY }}>
-            <Lock size={14} /> เข้าสู่ระบบ
+          <button type="button" onClick={submit} disabled={busy || !ready} className="w-full py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-1.5 disabled:opacity-60" style={{ background: NAVY }}>
+            <Lock size={14} /> {!ready ? "กำลังโหลดรายชื่อผู้ใช้..." : busy ? "กำลังตรวจสอบ..." : "เข้าสู่ระบบ"}
           </button>
         </div>
-        <button onClick={() => setShowDemo((s) => !s)} className="w-full text-center text-xs mt-4" style={{ color: "#9FB0C6" }}>
-          {showDemo ? "ซ่อน" : "แสดง"}บัญชีทดสอบ (สำหรับสาธิตเท่านั้น)
-        </button>
-        {showDemo && (
-          <div className="mt-2 bg-white/95 rounded-xl p-3 text-xs space-y-1 max-h-64 overflow-y-auto" style={{ color: SUB }}>
-            {MOCK_USERS.filter((u) => u.role !== "judge").map((u) => (
-              <div key={u.empId} className="flex justify-between">
-                <span>{u.name} <span className="opacity-60">({ROLE_LABEL[u.role]})</span></span>
-                <span className="font-mono">{u.empId}</span>
-              </div>
-            ))}
-            <div className="pt-1 opacity-70">* ในระบบจริง รหัสผ่านต้องแยกจากรหัสพนักงาน และตรวจสอบผ่านฐานข้อมูล/SSO ฝั่ง backend เท่านั้น</div>
-          </div>
-        )}
+        <div className="w-full text-center text-xs mt-4" style={{ color: "#9FB0C6" }}>
+          ลืมรหัสผ่าน หรือขอบัญชีใหม่ ติดต่อฝ่ายทรัพยากรบุคคล
+        </div>
       </div>
     </div>
   );
@@ -3911,22 +4529,63 @@ function LoginScreen({ onLogin }) {
 
 export default function KaizenApp() {
   // จำผู้ใช้ไว้ในแท็บเบราว์เซอร์ เมื่อกด Refresh จะไม่เด้งกลับหน้า Login (ปิดแท็บหรือกดออกจากระบบแล้วจะหายไป)
-  const [currentUser, setCurrentUser] = useState(() => {
+  // รายชื่อผู้ใช้: เริ่มจากรายการเริ่มต้นในโค้ด แล้วโหลดทับจาก Google Sheet (ถ้าติดตั้ง Users_Addon.gs)
+  const [users, setUsers] = useState(() => USERS.map((u) => ({ ...u })));
+  const [usersReady, setUsersReady] = useState(false);
+  const [usersSync, setUsersSync] = useState("local"); // "sheet" | "local"
+  const applyUsers = (list) => {
+    USERS.splice(0, USERS.length, ...list); // ให้ฟังก์ชันอื่นที่อ้าง USERS ได้รายชื่อล่าสุดด้วย
+    setUsers(list);
+  };
+  useEffect(() => {
+    let alive = true;
+    const timer = setTimeout(() => alive && setUsersReady(true), 7000);
+    fetchUsersFromSheet()
+      .then((res) => {
+        if (!alive || !res.supported) return;
+        setUsersSync("sheet");
+        if (Array.isArray(res.users) && res.users.length) applyUsers(normalizeUsers(res.users));
+      })
+      .catch(() => {})
+      .finally(() => {
+        clearTimeout(timer);
+        if (alive) setUsersReady(true);
+      });
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, []);
+  // จำผู้ใช้ไว้ในแท็บเบราว์เซอร์ เมื่อกด Refresh จะไม่เด้งกลับหน้า Login (ปิดแท็บหรือกดออกจากระบบแล้วจะหายไป)
+  const [currentUserId, setCurrentUserId] = useState(() => {
     try {
-      const id = sessionStorage.getItem("kz_session_user");
-      return id ? MOCK_USERS.find((u) => u.empId === id) || null : null;
+      return sessionStorage.getItem("kz_session_user");
     } catch (e) {
       return null;
     }
   });
+  const currentUser = useMemo(() => users.find((u) => u.id === currentUserId && u.active !== false) || null, [users, currentUserId]);
   useEffect(() => {
     try {
-      if (currentUser) sessionStorage.setItem("kz_session_user", currentUser.empId);
+      if (currentUserId) sessionStorage.setItem("kz_session_user", currentUserId);
       else sessionStorage.removeItem("kz_session_user");
     } catch (e) {}
-  }, [currentUser]);
+  }, [currentUserId]);
+  // บัญชีที่จำไว้ถูกลบ/ปิดใช้งาน -> ออกจากระบบ
+  useEffect(() => {
+    if (usersReady && currentUserId && !currentUser) setCurrentUserId(null);
+  }, [usersReady, currentUser, currentUserId]);
+  const saveUsersList = async (list) => {
+    applyUsers(list);
+    if (usersSync !== "sheet") return "local";
+    const ok = await saveUsersToSheet(list);
+    return ok ? "sheet" : "error";
+  };
   const [kaizens, setKaizens] = useState(() => seedData().map(normalizeKaizen));
   const [sheetStatus, setSheetStatus] = useState("checking"); // "checking" | "connected" | "demo"
+  useEffect(() => {
+    syncState.tracking = sheetStatus === "connected" || sheetStatus === "connected-empty";
+  }, [sheetStatus]);
 
   useEffect(() => {
     fetchKaizensFromSheet()
@@ -4010,23 +4669,31 @@ export default function KaizenApp() {
   const noticeJudges = (message) => activeJudges(award).forEach((j) => pushNotification(j.userName, message, null));
 
   const judgeSubmitted = (judge) => {
-    pushNotification("Admin", `${judge.userName} ส่งคะแนน ${award.roundName} เรียบร้อยแล้ว`, null);
-    pushNotification("ผอ.โรงงาน", `${judge.userName} ส่งคะแนน ${award.roundName} เรียบร้อยแล้ว`, null);
+    notifyRole("admin", `${judge.userName} ส่งคะแนน ${award.roundName} เรียบร้อยแล้ว`, null);
+    notifyRole("director", `${judge.userName} ส่งคะแนน ${award.roundName} เรียบร้อยแล้ว`, null);
   };
 
   const announceAward = (winners) => {
     winners.forEach((w) =>
       pushNotification(w.submittedBy, `🏆 ยินดีด้วย! เรื่อง "${w.title}" ได้รับ${w.tier} ใน ${award.roundName}`, w.id)
     );
-    pushNotification("Admin", `ผู้อำนวยการยืนยันผล ${award.roundName} แล้ว (${winners.length} รางวัล)`, winners[0]?.id);
+    notifyRole("admin", `ผู้อำนวยการยืนยันผล ${award.roundName} แล้ว (${winners.length} รางวัล)`, winners[0]?.id);
   };
 
   const pushNotification = (recipientName, message, kaizenId) => {
     if (!recipientName) return;
     setNotifications((list) => [{ id: uid(), recipientName, message, kaizenId, read: false, date: nowStamp() }, ...list]);
   };
-  const findSupervisorFor = (department) => MOCK_USERS.find((u) => u.role === "supervisor" && u.departments.includes(department));
-  const findByRole = (role) => MOCK_USERS.find((u) => u.role === role);
+  const findSupervisorFor = (department) => users.find((u) => u.role === "supervisor" && u.active !== false && u.departments.includes(department));
+  // แจ้งเตือนทุกบัญชีที่มีบทบาทนั้น (เช่น มี Admin หลายคน)
+  const notifyRole = (role, message, kaizenId) => {
+    const seen = new Set();
+    users.filter((u) => u.role === role && u.active !== false).forEach((u) => {
+      if (seen.has(u.name)) return;
+      seen.add(u.name);
+      pushNotification(u.name, message, kaizenId);
+    });
+  };
 
   const updateKaizen = (id, patch) => setKaizens((list) => list.map((k) => (k.id === id ? { ...k, ...patch } : k)));
 
@@ -4146,12 +4813,10 @@ export default function KaizenApp() {
     // แจ้งเตือนผู้เกี่ยวข้องขั้นถัดไป
     if (action === "approve") {
       if (k.status === "pending_supervisor") {
-        const admin = findByRole("admin");
-        if (admin) pushNotification(admin.name, `หัวหน้างานอนุมัติแล้ว รอ Admin ตรวจสอบ: "${k.title}"`, k.id);
+        notifyRole("admin", `หัวหน้างานอนุมัติแล้ว รอ Admin ตรวจสอบ: "${k.title}"`, k.id);
         pushNotification(k.submittedBy, `เรื่อง "${k.title}" ผ่านการอนุมัติจากหัวหน้างานแล้ว กำลังรอ Admin ตรวจสอบ`, k.id);
       } else if (k.status === "pending_admin") {
-        const director = findByRole("director");
-        if (director) pushNotification(director.name, `Admin ตรวจสอบแล้ว รออนุมัติขั้นสุดท้าย: "${k.title}"`, k.id);
+        notifyRole("director", `Admin ตรวจสอบแล้ว รออนุมัติขั้นสุดท้าย: "${k.title}"`, k.id);
         pushNotification(k.submittedBy, `เรื่อง "${k.title}" ผ่านการตรวจสอบจาก Admin แล้ว รอผู้อำนวยการอนุมัติขั้นสุดท้าย`, k.id);
       } else if (k.status === "pending_director") {
         pushNotification(k.submittedBy, `🎉 เรื่อง "${k.title}" ได้รับอนุมัติขั้นสุดท้ายเรียบร้อยแล้ว!`, k.id);
@@ -4165,8 +4830,7 @@ export default function KaizenApp() {
         if (supervisor) pushNotification(supervisor.name, `เรื่อง "${k.title}" ถูกส่งกลับมาให้ท่านทบทวนอีกครั้ง`, k.id);
         pushNotification(k.submittedBy, `เรื่อง "${k.title}" ถูกส่งกลับไปให้หัวหน้างานทบทวนอีกครั้ง`, k.id);
       } else if (target === "admin") {
-        const admin = findByRole("admin");
-        if (admin) pushNotification(admin.name, `เรื่อง "${k.title}" ถูกส่งกลับมาให้ท่านทบทวนอีกครั้ง`, k.id);
+        notifyRole("admin", `เรื่อง "${k.title}" ถูกส่งกลับมาให้ท่านทบทวนอีกครั้ง`, k.id);
         pushNotification(k.submittedBy, `เรื่อง "${k.title}" ถูกส่งกลับไปให้ Admin ทบทวนอีกครั้ง`, k.id);
       }
     }
@@ -4193,6 +4857,7 @@ export default function KaizenApp() {
     { key: "admin", label: "Admin", icon: ClipboardList, roles: ["admin"] },
     { key: "director", label: "ผู้อำนวยการ", icon: Building2, roles: ["director"] },
     { key: "award", label: "Kaizen Award", icon: Trophy, roles: ["admin", "director"] },
+    { key: "users", label: "จัดการผู้ใช้", icon: Users, roles: ["admin"] },
     { key: "judge", label: "ให้คะแนน Kaizen Award", icon: Medal, roles: ["judge"] },
   ];
   const NAV = currentUser ? ALL_NAV.filter((n) => n.roles.includes(currentUser.role)) : ALL_NAV;
@@ -4202,18 +4867,29 @@ export default function KaizenApp() {
   }, [currentUser, tab]);
 
   if (!currentUser) {
+    if (currentUserId && !usersReady) {
+      return (
+        <div className="min-h-screen w-full flex items-center justify-center" style={{ background: NAVY_DEEP, color: "#9FB0C6", fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif" }}>
+          กำลังโหลดข้อมูลผู้ใช้...
+        </div>
+      );
+    }
     return (
       <LoginScreen
+        users={users}
+        ready={usersReady}
         onLogin={(user) => {
-          setCurrentUser(user);
+          setCurrentUserId(user.id);
           setTab(user.role); // ล็อกอินแล้วพาไปหน้าตามสิทธิ์ของตนเองก่อน
         }}
       />
     );
   }
 
-  const myKaizens = kaizens.filter((k) => k.submittedBy === currentUser.name);
-  const myNotifications = notifications.filter((n) => n.recipientName === currentUser.name);
+  // ชื่อที่ใช้ระบุ "ของฉัน": ชื่อบัญชีปัจจุบัน + ชื่อเดิมที่เคยใช้ (กรณี Admin เปลี่ยนชื่อบัญชี)
+  const myNames = [currentUser.name, ...(currentUser.aliases || [])];
+  const myKaizens = kaizens.filter((k) => myNames.includes(k.submittedBy));
+  const myNotifications = notifications.filter((n) => myNames.includes(n.recipientName));
   const myUnreadCount = myNotifications.filter((n) => !n.read).length;
   const supervisorQueue = kaizens.filter((k) => k.status === "pending_supervisor" && currentUser.departments.includes(k.department));
   const adminQueue = kaizens.filter((k) => k.status === "pending_admin");
@@ -4221,6 +4897,7 @@ export default function KaizenApp() {
 
   return (
     <AwardCtx.Provider value={award}>
+    <SyncStatusBar />
     <div className="min-h-screen w-full" style={{ background: SLATE, fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif" }}>
       {/* Top bar */}
       <div className="sticky top-0 z-30 border-b" style={{ background: NAVY_DEEP, borderColor: "#0A1830" }}>
@@ -4294,7 +4971,7 @@ export default function KaizenApp() {
                 <NotificationPanel
                   notifications={myNotifications}
                   onClose={() => setShowNotifs(false)}
-                  onMarkAllRead={() => setNotifications((list) => list.map((n) => (n.recipientName === currentUser.name ? { ...n, read: true } : n)))}
+                  onMarkAllRead={() => setNotifications((list) => list.map((n) => (myNames.includes(n.recipientName) ? { ...n, read: true } : n)))}
                   onItemClick={(n) => {
                     setNotifications((list) => list.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
                     const k = kaizens.find((x) => x.id === n.kaizenId);
@@ -4309,7 +4986,7 @@ export default function KaizenApp() {
               <div className="text-[10px]" style={{ color: "#9FB0C6" }}>{ROLE_LABEL[currentUser.role]}</div>
             </div>
             <button
-              onClick={() => { setCurrentUser(null); setTab("dashboard"); setAwardDraft({}); }}
+              onClick={() => { setCurrentUserId(null); setTab("dashboard"); setAwardDraft({}); }}
               title="ออกจากระบบ"
               className="p-1.5 rounded-lg"
               style={{ color: "#C7D2E0" }}
@@ -4493,6 +5170,16 @@ export default function KaizenApp() {
               />
             </div>
           </>
+        )}
+        {tab === "users" && currentUser.role === "admin" && (
+          <UserManager
+            users={users}
+            kaizens={kaizens}
+            departments={departments}
+            currentUser={currentUser}
+            onSave={saveUsersList}
+            syncMode={usersSync}
+          />
         )}
         {tab === "judge" && (
           <JudgePage
