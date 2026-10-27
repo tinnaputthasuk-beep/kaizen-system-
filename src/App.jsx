@@ -1791,22 +1791,105 @@ function loadExternalScript(src) {
   });
 }
 
-// รูปจาก Google Drive ต้องใช้ลิงก์ที่อนุญาตให้นำไปวาดเป็นไฟล์รูปภาพได้
-function driveImgUrl(src) {
-  const m = String(src).match(/drive\.google\.com\/(?:uc\?[^#]*?id=|file\/d\/)([\w-]+)/);
-  return m ? `https://lh3.googleusercontent.com/d/${m[1]}=w1600` : src;
+// ---------- รูปจาก Google Drive -> ไฟล์ภาพโปสเตอร์ ----------
+// Google ไม่อนุญาตให้เว็บอื่นอ่านรูปจาก Drive ไปวาดลงไฟล์ภาพตรงๆ จึงให้ Apps Script (Code.gs 2026-10-27.2 ขึ้นไป) ส่งรูปมาให้แทน
+const driveFileId = (src) => {
+  const m = String(src || "").match(/drive\.google\.com\/(?:uc\?[^#]*?id=|file\/d\/|thumbnail\?[^#]*?id=)([\w-]+)|lh3\.googleusercontent\.com\/d\/([\w-]+)/);
+  return m ? m[1] || m[2] : null;
+};
+const TRANSPARENT_PX = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+let backendFeaturesPromise = null;
+function getBackendFeatures() {
+  if (!backendFeaturesPromise) {
+    backendFeaturesPromise = fetch(`${GOOGLE_SHEETS_API_URL}?type=ping`)
+      .then((r) => r.json())
+      .then((j) => (j && Array.isArray(j.features) ? j.features : []))
+      .catch(() => {
+        backendFeaturesPromise = null; // ลองใหม่ครั้งหน้า
+        return [];
+      });
+  }
+  return backendFeaturesPromise;
 }
 
-async function downloadPosterPng(node, filename) {
+async function fetchDriveImagesViaScript(ids) {
+  const features = await getBackendFeatures();
+  if (!features.includes("images")) return { map: {}, supported: false };
+  const map = {};
+  const batches = [];
+  for (let i = 0; i < ids.length; i += 6) batches.push(ids.slice(i, i + 6));
+  await Promise.all(
+    batches.map(async (batch) => {
+      try {
+        const res = await fetch(`${GOOGLE_SHEETS_API_URL}?type=images&ids=${batch.join(",")}`);
+        const j = await res.json();
+        Object.assign(map, (j && j.images) || {});
+      } catch (e) { /* รูปชุดนี้ดึงไม่ได้ จะนับเป็นรูปที่ไม่ขึ้น */ }
+    })
+  );
+  return { map, supported: true };
+}
+
+// โหลดรูปจากลิงก์ภายนอก (ต้องเป็นลิงก์ที่อนุญาตให้อ่านข้ามเว็บ) แล้วแปลงเป็นข้อมูลรูปภาพ (data URL) ถ้าอ่านไม่ได้คืน null
+function loadImageAsDataUrl(url, ms = 12000) {
+  return new Promise((resolve) => {
+    const im = new Image();
+    const timer = setTimeout(() => resolve(null), ms);
+    im.crossOrigin = "anonymous";
+    im.onload = () => {
+      clearTimeout(timer);
+      try {
+        const scale = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(im.naturalWidth * scale));
+        c.height = Math.max(1, Math.round(im.naturalHeight * scale));
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(im, 0, 0, c.width, c.height);
+        resolve(c.toDataURL("image/jpeg", 0.88));
+      } catch (e) {
+        resolve(null); // canvas ถูกล็อก (ไม่อนุญาตให้อ่านข้ามเว็บ)
+      }
+    };
+    im.onerror = () => { clearTimeout(timer); resolve(null); };
+    im.src = url;
+  });
+}
+
+// คืนค่า { total, missing, scriptSupported } : รูปจาก Drive ทั้งหมดกี่รูป / กี่รูปที่ไม่สามารถใส่ในไฟล์ภาพได้
+async function downloadPosterPng(node, filename, onStep) {
   await loadExternalScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+  const ids = Array.from(new Set(Array.from(node.querySelectorAll("img")).map((img) => driveFileId(img.currentSrc || img.src)).filter(Boolean)));
+  const usable = {};
+  let missing = 0;
+  let scriptSupported = true;
+  if (ids.length) {
+    if (onStep) onStep("กำลังเตรียมรูปภาพ...");
+    const via = await fetchDriveImagesViaScript(ids);
+    scriptSupported = via.supported;
+    Object.assign(usable, via.map);
+    // รูปที่ Apps Script ส่งให้ไม่ได้ (Code.gs เวอร์ชันเก่า / เกิดข้อผิดพลาด) ลองลิงก์ตรงของ Google ที่อนุญาตให้อ่านข้ามเว็บ
+    await Promise.all(
+      ids.filter((id) => !usable[id]).map(async (id) => {
+        const dataUrl = await loadImageAsDataUrl(`https://lh3.googleusercontent.com/d/${id}=w1600`);
+        if (dataUrl) usable[id] = dataUrl;
+        else missing += 1;
+      })
+    );
+    if (onStep) onStep("กำลังสร้างรูปภาพ...");
+  }
   const canvas = await window.html2canvas(node, {
     scale: 2,
     useCORS: true,
     backgroundColor: "#ffffff",
     onclone: (doc) => {
       doc.querySelectorAll("img").forEach((img) => {
+        const id = driveFileId(img.currentSrc || img.src);
+        if (!id) return;
         img.crossOrigin = "anonymous";
-        img.src = driveImgUrl(img.src);
+        img.src = usable[id] || TRANSPARENT_PX; // รูปที่ดึงไม่ได้ปล่อยว่าง (ไม่รอหมดเวลา)
       });
     },
   });
@@ -1819,6 +1902,7 @@ async function downloadPosterPng(node, filename) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return { total: ids.length, missing, scriptSupported };
 }
 
 // พิมพ์เฉพาะโปสเตอร์ (A4 แนวนอน) เลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์เพื่อเก็บเป็นไฟล์
@@ -1855,30 +1939,43 @@ function PresentationView({ k }) {
   const [lb, setLb] = useState(null);
   const posterRef = useRef(null);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(null); // { type: "warn" | "error", text }
   const fileBase = `Kaizen_${k.registeredNo || "poster"}`;
+  const [step, setStep] = useState("");
   const savePng = async () => {
-    setMsg("");
+    setMsg(null);
     setSaving(true);
+    setStep("");
     try {
-      await downloadPosterPng(posterRef.current, `${fileBase}.png`);
+      const r = await downloadPosterPng(posterRef.current, `${fileBase}.png`, setStep);
+      if (r.missing > 0) {
+        setMsg({
+          type: "warn",
+          text: `ดาวน์โหลดแล้ว แต่รูป ${r.missing} ใบจาก ${r.total} ใบ ไม่ขึ้นในไฟล์ภาพ (Google ไม่ให้ดึงรูปโดยตรง)` +
+            (r.scriptSupported ? " ลองกดดาวน์โหลดอีกครั้ง" : " แก้ได้โดยอัปเดต Code.gs เป็นเวอร์ชันล่าสุด (2026-10-27.2 ขึ้นไป) แล้ว Deploy") +
+            " หรือใช้ปุ่ม \"พิมพ์ / บันทึกเป็น PDF\" ซึ่งแสดงรูปครบเสมอ",
+        });
+      }
     } catch (e) {
-      setMsg("ดาวน์โหลดเป็นรูปภาพไม่สำเร็จ (อาจถูกบล็อกโดยเครือข่าย หรือรูปจาก Google Drive ไม่อนุญาตให้ดึง) ลองใช้ปุ่ม \"พิมพ์ / บันทึกเป็น PDF\" แทนได้ค่ะ");
+      setMsg({ type: "error", text: "ดาวน์โหลดเป็นรูปภาพไม่สำเร็จ (อาจถูกบล็อกโดยเครือข่าย) ลองใช้ปุ่ม \"พิมพ์ / บันทึกเป็น PDF\" แทนได้ค่ะ" });
     }
     setSaving(false);
+    setStep("");
   };
   return (
     <div>
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <span className="text-xs mr-auto" style={{ color: SUB }}>นำโปสเตอร์ไปใช้งานต่อ:</span>
         <button onClick={savePng} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-60" style={{ background: NAVY }}>
-          <Download size={14} /> {saving ? "กำลังสร้างรูปภาพ..." : "ดาวน์โหลดเป็นรูปภาพ (PNG)"}
+          <Download size={14} /> {saving ? step || "กำลังสร้างรูปภาพ..." : "ดาวน์โหลดเป็นรูปภาพ (PNG)"}
         </button>
         <button onClick={() => printPoster(posterRef.current, fileBase)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: NAVY, color: NAVY }}>
           <Printer size={14} /> พิมพ์ / บันทึกเป็น PDF
         </button>
       </div>
-      {msg && <div className="text-xs mb-3 rounded-lg px-3 py-2" style={{ background: "#FBEAE8", color: "#8B2E24" }}>{msg}</div>}
+      {msg && (
+        <div className="text-xs mb-3 rounded-lg px-3 py-2" style={msg.type === "warn" ? { background: "#FDF3E1", color: "#6B4A10" } : { background: "#FBEAE8", color: "#8B2E24" }}>{msg.text}</div>
+      )}
     <div ref={posterRef} className="rounded-xl overflow-hidden border" style={{ borderColor: "#D8DDE5" }}>
       <ImageLightbox photos={lb?.photos} index={lb?.index} onClose={() => setLb(null)} onIndex={(i) => setLb((x) => ({ ...x, index: i }))} />
 
