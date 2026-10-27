@@ -346,6 +346,34 @@ const SECTION_MAP = {
   "Procurement": "Support Function",
 };
 
+// รายชื่อหน่วยงานที่ Admin เพิ่ม/แก้/ลบเอง: เก็บในชีต KaizenUsers เป็นแถวพิเศษ id "__config" (ใช้ Code.gs ตัวเดิมได้ ไม่ต้องแก้)
+// SECTION_MAP ถูกอัปเดตตามรายการนี้ (หน่วยงาน -> ฝ่าย) เพื่อให้แดชบอร์ดจัดกลุ่มได้ถูกต้อง
+const BASE_SECTION_MAP = { ...SECTION_MAP };
+const BASE_SECTION_OPTIONS = [...SECTION_OPTIONS];
+function applyDeptConfig(cfg) {
+  const deps = Array.isArray(cfg && cfg.departments) ? cfg.departments.filter((d) => typeof d === "string" && d.trim()) : [];
+  if (!deps.length) return null;
+  const sections = cfg.sections && typeof cfg.sections === "object" ? cfg.sections : {};
+  Object.keys(SECTION_MAP).forEach((k) => delete SECTION_MAP[k]);
+  deps.forEach((d) => {
+    const sec = sections[d] || BASE_SECTION_MAP[d];
+    if (sec) SECTION_MAP[d] = sec;
+  });
+  // รายการฝ่าย (Section) ที่ Admin เพิ่ม/แก้/ลบ (ไม่มีข้อมูลนี้ = ใช้ฝ่ายเริ่มต้น)
+  const sl = Array.isArray(cfg.sectionList) ? cfg.sectionList.filter((x) => typeof x === "string" && x.trim()) : [];
+  SECTION_OPTIONS.splice(0, SECTION_OPTIONS.length, ...(sl.length ? sl : BASE_SECTION_OPTIONS));
+  deps.forEach((d) => {
+    const sec = SECTION_MAP[d];
+    if (sec && !SECTION_OPTIONS.includes(sec)) SECTION_OPTIONS.push(sec);
+  });
+  return deps;
+}
+const buildDeptConfigRow = (deps) => ({
+  id: "__config", kind: "departments", departments: deps, sectionList: [...SECTION_OPTIONS],
+  sections: Object.fromEntries(deps.map((d) => [d, SECTION_MAP[d] || "อื่นๆ"])),
+});
+
+
 const STATUS_META = {
   draft: { label: "แบบร่าง", color: "#8A93A3", bg: "#EEF0F3" },
   pending_supervisor: { label: "รอหัวหน้างานอนุมัติ", color: "#B8791F", bg: "#FBF0DD" },
@@ -766,8 +794,9 @@ function AwardLevelCard({ k }) {
 }
 
 // ---------- ตัวกรอง Multi Select (ใช้กับตารางของทุกบทบาท และ Dashboard) ----------
-function MultiSelectFilter({ label, options, selected, onSelected, query, onQuery, dark, align = "left" }) {
+function MultiSelectFilter({ label, options, selected, onSelected, query, onQuery, dark, align = "left", allLabel, showSearch = true, queryIsFilter = true }) {
   const [open, setOpen] = useState(false);
+  const [localQ, setLocalQ] = useState("");
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
@@ -777,9 +806,14 @@ function MultiSelectFilter({ label, options, selected, onSelected, query, onQuer
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
-  const q = (query || "").trim().toLowerCase();
+  const queryValue = query !== undefined ? query : localQ;
+  const setQuery = (v) => (onQuery ? onQuery(v) : setLocalQ(v));
+  const q = (queryValue || "").trim().toLowerCase();
   const shown = options.filter((o) => !q || o.label.toLowerCase().includes(q));
-  const active = selected.length > 0 || !!q;
+  const active = selected.length > 0 || (queryIsFilter && !!q);
+  // allLabel: แสดง "ทุก..." เมื่อไม่ได้เลือก / ชื่อที่เลือกเมื่อเลือก 1 ค่า / "ชื่อ N รายการ" เมื่อเลือกหลายค่า
+  const selLabels = options.filter((o) => selected.includes(o.value)).map((o) => o.label);
+  const btnText = !allLabel ? label : selected.length === 0 ? allLabel : selected.length === 1 ? selLabels[0] : `${label} ${selected.length} รายการ`;
   const toggle = (v) => onSelected(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
   const allShown = shown.length > 0 && shown.every((o) => selected.includes(o.value));
   const btnStyle = dark
@@ -788,23 +822,25 @@ function MultiSelectFilter({ label, options, selected, onSelected, query, onQuer
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap" style={btnStyle}>
-        {label}
-        {selected.length > 0 && (
+        <span className={allLabel ? "max-w-[170px] truncate" : ""}>{btnText}</span>
+        {!allLabel && selected.length > 0 && (
           <span className="min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ background: DB_BLUE }}>{selected.length}</span>
         )}
-        {q && selected.length === 0 && <Search size={11} />}
+        {queryIsFilter && q && selected.length === 0 && <Search size={11} />}
         <ChevronDown size={12} />
       </button>
       {open && (
         <div className="absolute z-40 mt-1 w-72 rounded-xl border bg-white shadow-xl p-2" style={{ borderColor: "#D8DDE5", [align]: 0 }}>
-          <input
-            autoFocus
-            value={query || ""}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder={`ค้นหา ${label}...`}
-            className="w-full rounded-lg border px-2.5 py-1.5 text-xs mb-1.5 outline-none"
-            style={{ borderColor: "#D8DDE5", color: INK }}
-          />
+          {showSearch && (
+            <input
+              autoFocus
+              value={queryValue || ""}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`ค้นหา ${label}...`}
+              className="w-full rounded-lg border px-2.5 py-1.5 text-xs mb-1.5 outline-none"
+              style={{ borderColor: "#D8DDE5", color: INK }}
+            />
+          )}
           <div className="flex items-center justify-between px-1 pb-1 text-[11px]" style={{ color: SUB }}>
             <button
               type="button"
@@ -815,7 +851,7 @@ function MultiSelectFilter({ label, options, selected, onSelected, query, onQuer
             >
               {allShown ? "ยกเลิกที่แสดงอยู่ทั้งหมด" : "เลือกที่แสดงอยู่ทั้งหมด"}
             </button>
-            <button type="button" className="underline" onClick={() => { onSelected([]); onQuery(""); }}>ล้าง</button>
+            <button type="button" className="underline" onClick={() => { onSelected([]); setQuery(""); }}>ล้าง</button>
           </div>
           <div className="max-h-56 overflow-y-auto">
             {shown.length === 0 && <div className="text-xs py-3 text-center" style={{ color: SUB }}>ไม่พบรายการ</div>}
@@ -2104,41 +2140,68 @@ function ReviewModal({ k, onClose, onDecide, roleLabel, allowCategorize }) {
   );
 }
 
-function DepartmentManager({ departments, onChange }) {
-  const [newDept, setNewDept] = useState("");
-  const updateAt = (i, val) => onChange(departments.map((d, idx) => (idx === i ? val : d)));
-  const removeAt = (i) => onChange(departments.filter((_, idx) => idx !== i));
-  const addNew = () => {
-    const v = newDept.trim();
-    if (v && !departments.includes(v)) {
-      onChange([...departments, v]);
-      setNewDept("");
-    }
-  };
+function DepartmentManager({ departments, ops }) {
+  const [panel, setPanel] = useState(null); // { type: "add" | "edit" | "delete" | "sec-add" | "sec-edit" | "sec-delete", name?, section? }
+  const [note, setNote] = useState(null);
+  const groups = groupBySection(departments);
+  const done = (r) => { setPanel(null); setNote(r.saved); };
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: "#E2E6EB" }}>
-      <div className="font-medium text-sm mb-3 flex items-center gap-1.5" style={{ color: INK }}>
-        <Building2 size={15} /> จัดการรายชื่อหน่วยงาน
+    <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "#E2E6EB" }}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="font-medium text-sm flex items-center gap-1.5" style={{ color: INK }}>
+          <Building2 size={15} /> จัดการฝ่ายและหน่วยงาน <span className="text-xs font-normal" style={{ color: SUB }}>({SECTION_OPTIONS.length} ฝ่าย · {departments.length} หน่วยงาน)</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={() => setPanel({ type: "sec-add" })} className="text-xs font-medium px-3 py-1.5 rounded-lg border flex items-center gap-1" style={{ borderColor: NAVY, color: NAVY }}>
+            <Plus size={13} /> เพิ่มฝ่ายใหม่
+          </button>
+          <button type="button" onClick={() => setPanel({ type: "add" })} className="text-xs font-medium px-3 py-1.5 rounded-lg border flex items-center gap-1" style={{ borderColor: NAVY, color: NAVY }}>
+            <Plus size={13} /> เพิ่มหน่วยงานใหม่
+          </button>
+        </div>
       </div>
-      <div className="space-y-2 mb-3">
-        {departments.map((d, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-xs w-5" style={{ color: SUB }}>{i + 1}</span>
-            <input value={d} onChange={(e) => updateAt(i, e.target.value)} className="flex-1 rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} />
-            <button onClick={() => removeAt(i)} title="ลบหน่วยงานนี้" className="p-1.5 rounded-lg border" style={{ borderColor: "#D8DDE5", color: RED }}>
-              <X size={14} />
-            </button>
+      {panel && panel.type === "sec-add" && <SectionAddForm ops={ops} onDone={done} onCancel={() => setPanel(null)} />}
+      {panel && panel.type === "add" && <DeptAddForm key={panel.section || "x"} defaultSection={panel.section} ops={ops} onDone={done} onCancel={() => setPanel(null)} />}
+      <div className="space-y-3">
+        {groups.map(([sec, list]) => (
+          <div key={sec}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold" style={{ color: NAVY }}>{sec}</span>
+              <span className="text-[11px]" style={{ color: "#A3ABB8" }}>{list.length} หน่วยงาน</span>
+              {sec !== "อื่นๆ" && (
+                <>
+                  <button type="button" onClick={() => setPanel({ type: "add", section: sec })} className="text-[11px] px-1.5 py-0.5 rounded border" style={{ borderColor: "#D8DDE5", color: SUB }}>+ หน่วยงาน</button>
+                  <TinyIcon icon={Pencil} label={`แก้ไขฝ่าย ${sec}`} color="#6A4BC9" onClick={() => setPanel({ type: "sec-edit", name: sec })} />
+                  <TinyIcon icon={Trash2} label={`ลบฝ่าย ${sec}`} color={RED} onClick={() => setPanel({ type: "sec-delete", name: sec })} />
+                </>
+              )}
+            </div>
+            {panel && panel.type === "sec-edit" && panel.name === sec && <div className="mb-1 pl-3"><SectionEditForm key={sec} name={sec} ops={ops} onDone={done} onCancel={() => setPanel(null)} /></div>}
+            {panel && panel.type === "sec-delete" && panel.name === sec && <div className="mb-1 pl-3"><SectionDeleteConfirm key={sec} name={sec} ops={ops} onDone={done} onCancel={() => setPanel(null)} /></div>}
+            {list.length === 0 && <div className="text-[11px] pl-3" style={{ color: "#A3ABB8" }}>ยังไม่มีหน่วยงานในฝ่ายนี้</div>}
+            <div className="space-y-1">
+              {list.map((d) => {
+                const st = ops.stats(d);
+                return (
+                  <div key={d}>
+                    <div className="flex items-center gap-2 text-sm pl-3">
+                      <span className="flex-1" style={{ color: INK }}>{d}</span>
+                      <span className="text-[11px]" style={{ color: "#A3ABB8" }}>Kaizen {st.kaizens} · บัญชี {st.users.length}</span>
+                      <TinyIcon icon={Pencil} label={`แก้ไขหน่วยงาน ${d}`} color="#6A4BC9" onClick={() => setPanel({ type: "edit", name: d })} />
+                      <TinyIcon icon={Trash2} label={`ลบหน่วยงาน ${d}`} color={RED} onClick={() => setPanel({ type: "delete", name: d })} />
+                    </div>
+                    {panel && panel.type === "edit" && panel.name === d && <div className="mt-1 pl-3"><DeptEditForm key={d} name={d} ops={ops} onDone={done} onCancel={() => setPanel(null)} /></div>}
+                    {panel && panel.type === "delete" && panel.name === d && <div className="mt-1 pl-3"><DeptDeleteConfirm key={d} name={d} ops={ops} onDone={done} onCancel={() => setPanel(null)} /></div>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-2">
-        <input value={newDept} onChange={(e) => setNewDept(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addNew()} placeholder="เพิ่มหน่วยงานใหม่ เช่น บรรจุ 4" className="flex-1 rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} />
-        <button onClick={addNew} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white flex items-center gap-1" style={{ background: NAVY }}>
-          <PlusCircle size={14} /> เพิ่ม
-        </button>
-      </div>
-      <div className="text-[11px] mt-2" style={{ color: "#8A93A3" }}>
-        * รายชื่อหน่วยงานนี้ใช้เป็นตัวเลือกในฟอร์มส่งเรื่องและตัวกรองแดชบอร์ด การแก้ไข/ลบที่นี่เป็นการสาธิตเท่านั้น (ไม่ย้อนปรับปรุงรายการ Kaizen หรือบัญชีผู้ใช้ที่มีอยู่แล้ว)
+      <DeptResultNote key={String(note)} saved={note} ops={ops} onClear={() => setNote(null)} />
+      <div className="text-[11px]" style={{ color: "#8A93A3" }}>
+        * ฝ่าย (Section) ใช้จัดกลุ่มหน่วยงานในแดชบอร์ด · เปลี่ยนชื่อหน่วยงาน: ระบบแก้ในบัญชีและ Kaizen เดิมให้ทั้งหมด · ลบหน่วยงานได้เฉพาะที่ไม่มี Kaizen และไม่ทำให้บัญชีใดไม่เหลือหน่วยงาน · ลบฝ่ายได้เฉพาะฝ่ายที่ไม่มีหน่วยงาน
       </div>
     </div>
   );
@@ -2243,38 +2306,46 @@ function FilterableKaizenTable({ rows, onRowClick, onPresent }) {
 }
 
 function Dashboard({ data, departments, onView, onPresent }) {
-  const [yearFilter, setYearFilter] = useState("all");
-  const [monthFilter, setMonthFilter] = useState("all");
-  const [sectionFilter, setSectionFilter] = useState("all");
-  const [deptFilter, setDeptFilter] = useState("all");
-  const [catFilter, setCatFilter] = useState("all");
-  const [activityFilter, setActivityFilter] = useState("all");
-  const [kaizenTypeFilter, setKaizenTypeFilter] = useState("all");
+  // ตัวกรองทุกตัวเลือกได้หลายค่า (ว่าง = ทุกค่า) · เลือกหลายค่าในตัวกรองเดียวกัน = "หรือ" · ต่างตัวกรอง = "และ"
+  const [yearFilter, setYearFilter] = useState([]);
+  const [monthFilter, setMonthFilter] = useState([]);
+  const [sectionFilter, setSectionFilter] = useState([]);
+  const [deptFilter, setDeptFilter] = useState([]);
+  const [catFilter, setCatFilter] = useState([]);
+  const [activityFilter, setActivityFilter] = useState([]);
+  const [kaizenTypeFilter, setKaizenTypeFilter] = useState([]);
+  const anyDashFilter = [yearFilter, monthFilter, sectionFilter, deptFilter, catFilter, activityFilter, kaizenTypeFilter].some((f) => f.length > 0);
+  const clearDashFilters = () => {
+    setYearFilter([]); setMonthFilter([]); setSectionFilter([]); setDeptFilter([]); setCatFilter([]); setActivityFilter([]); setKaizenTypeFilter([]);
+  };
 
   const yearOptions = useMemo(() => Array.from(new Set(data.map((k) => k.date.slice(0, 4)))).sort().reverse(), [data]);
 
   // เมื่อเลือกฝ่ายแล้ว รายการหน่วยงานใน Unit จะกรองให้เหลือเฉพาะหน่วยงานในฝ่ายนั้น
   const unitOptions = useMemo(() => {
     const all = departments && departments.length ? departments : DEFAULT_DEPARTMENTS;
-    if (sectionFilter === "all") return all;
-    return all.filter((d) => SECTION_MAP[d] === sectionFilter);
+    if (sectionFilter.length === 0) return all;
+    return all.filter((d) => sectionFilter.includes(SECTION_MAP[d]));
   }, [departments, sectionFilter]);
 
-  const handleSectionChange = (val) => {
-    setSectionFilter(val);
-    if (deptFilter !== "all" && SECTION_MAP[deptFilter] !== val && val !== "all") setDeptFilter("all");
+  // เปลี่ยนฝ่ายแล้ว หน่วยงานที่เลือกไว้แต่ไม่อยู่ในฝ่ายที่เลือก จะถูกเอาออกให้อัตโนมัติ
+  const handleSectionChange = (vals) => {
+    setSectionFilter(vals);
+    if (vals.length > 0) setDeptFilter((prev) => prev.filter((d) => vals.includes(SECTION_MAP[d])));
   };
 
   const filtered = data.filter((k) => {
     const y = k.date.slice(0, 4);
     const m = k.date.slice(5, 7);
-    if (yearFilter !== "all" && y !== yearFilter) return false;
-    if (monthFilter !== "all" && m !== monthFilter) return false;
-    if (sectionFilter !== "all" && SECTION_MAP[k.department] !== sectionFilter) return false;
-    if (deptFilter !== "all" && k.department !== deptFilter) return false;
-    if (catFilter !== "all" && !k.categories.includes(catFilter)) return false;
-    if (activityFilter !== "all" && k.activityType !== activityFilter) return false;
-    if (kaizenTypeFilter !== "all" && k.kaizenType !== kaizenTypeFilter) return false;
+    const has = (list, v) => list.length === 0 || list.includes(v);
+    if (!has(yearFilter, y)) return false;
+    if (!has(monthFilter, m)) return false;
+    if (!has(sectionFilter, SECTION_MAP[k.department])) return false;
+    if (!has(deptFilter, k.department)) return false;
+    const cats = k.categories || [];
+    if (catFilter.length > 0 && !catFilter.some((c) => (c === "__none" ? cats.length === 0 : cats.includes(c)))) return false;
+    if (!has(activityFilter, k.activityType)) return false;
+    if (!has(kaizenTypeFilter, k.kaizenType)) return false;
     return true;
   });
   // ยอดการส่ง Kaizen = หัวหน้างานอนุมัติแล้ว และเป็นประเภทกิจกรรม Kaizen เท่านั้น (ไม่นับ Suggestion)
@@ -2370,34 +2441,14 @@ function Dashboard({ data, departments, onView, onPresent }) {
       <div className="rounded-2xl p-4" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
         <div className="flex flex-wrap gap-2.5 items-center">
           <div className="flex items-center gap-1.5 text-xs font-medium text-white/90 pr-1"><Filter size={14} /> ตัวกรอง</div>
-          <select className={selectCls} style={inputStyle} value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
-            <option value="all">ทุกปี</option>
-            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select className={selectCls} style={inputStyle} value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
-            <option value="all">ทุกเดือน</option>
-            {THAI_MONTHS.map((m, i) => <option key={m} value={String(i + 1).padStart(2, "0")}>{m}</option>)}
-          </select>
-          <select className={selectCls} style={inputStyle} value={sectionFilter} onChange={(e) => handleSectionChange(e.target.value)}>
-            <option value="all">ทุกฝ่าย (Section)</option>
-            {SECTION_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select className={selectCls} style={inputStyle} value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
-            <option value="all">ทุกหน่วยงาน (Unit)</option>
-            {unitOptions.map((d) => <option key={d}>{d}</option>)}
-          </select>
-          <select className={selectCls} style={inputStyle} value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-            <option value="all">ทุกประเภทข้อมูล</option>
-            {CATEGORY_OPTIONS.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <select className={selectCls} style={inputStyle} value={activityFilter} onChange={(e) => setActivityFilter(e.target.value)}>
-            <option value="all">ทุกประเภทกิจกรรม</option>
-            {ACTIVITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-          </select>
-          <select className={selectCls} style={inputStyle} value={kaizenTypeFilter} onChange={(e) => setKaizenTypeFilter(e.target.value)}>
-            <option value="all">ทุกประเภท Kaizen</option>
-            {KAIZEN_TYPE_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-          </select>
+          <MultiSelectFilter dark label="ปี" allLabel="ทุกปี" showSearch={false} queryIsFilter={false} options={yearOptions.map((y) => ({ value: y, label: y }))} selected={yearFilter} onSelected={setYearFilter} />
+          <MultiSelectFilter dark label="เดือน" allLabel="ทุกเดือน" showSearch={false} queryIsFilter={false} options={THAI_MONTHS.map((m, i) => ({ value: String(i + 1).padStart(2, "0"), label: m }))} selected={monthFilter} onSelected={setMonthFilter} />
+          <MultiSelectFilter dark label="ฝ่าย" allLabel="ทุกฝ่าย (Section)" showSearch={false} queryIsFilter={false} options={SECTION_OPTIONS.map((x) => ({ value: x, label: x }))} selected={sectionFilter} onSelected={handleSectionChange} />
+          <MultiSelectFilter dark label="หน่วยงาน" allLabel="ทุกหน่วยงาน (Unit)" queryIsFilter={false} options={unitOptions.map((d) => ({ value: d, label: d }))} selected={deptFilter} onSelected={setDeptFilter} />
+          <MultiSelectFilter dark align="right" label="ประเภทข้อมูล" allLabel="ทุกประเภทข้อมูล" showSearch={false} queryIsFilter={false} options={[...CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })), { value: "__none", label: "ยังไม่จัดหมวด" }]} selected={catFilter} onSelected={setCatFilter} />
+          <MultiSelectFilter dark align="right" label="ประเภทกิจกรรม" allLabel="ทุกประเภทกิจกรรม" showSearch={false} queryIsFilter={false} options={ACTIVITY_OPTIONS.map((o) => ({ value: o, label: o }))} selected={activityFilter} onSelected={setActivityFilter} />
+          <MultiSelectFilter dark align="right" label="ประเภท Kaizen" allLabel="ทุกประเภท Kaizen" showSearch={false} queryIsFilter={false} options={KAIZEN_TYPE_OPTIONS.map((o) => ({ value: o, label: o }))} selected={kaizenTypeFilter} onSelected={setKaizenTypeFilter} />
+          {anyDashFilter && <button type="button" onClick={clearDashFilters} className="text-xs underline text-white px-1">ล้างตัวกรอง</button>}
           <div className="ml-auto flex items-center gap-3">
             <button
               onClick={handleExport}
@@ -3934,7 +3985,255 @@ const ROLE_BADGE = {
   employee: { bg: "#F1F3F6", color: "#5B6675" }, judge: { bg: "#F1ECFD", color: "#6A4BC9" },
 };
 
-function UserFormModal({ mode, original, users, departments, currentUser, focusPw, onClose, onSubmit }) {
+const savedNoteText = (saved) =>
+  saved === "sheet" ? "บันทึกลง Google Sheet แล้ว"
+  : saved === "error" ? "ใช้งานได้ในหน้านี้ แต่บันทึกลง Google Sheet ไม่สำเร็จ"
+  : "โหมดทดลอง: เก็บเฉพาะในหน้านี้ จะหายเมื่อรีเฟรช (ติดตั้ง Users_Addon.gs / Code.gs ฉบับล่าสุดเพื่อบันทึกถาวร)";
+
+function DeptResultNote({ saved, ops, onClear }) {
+  const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(saved);
+  if (!saved) return null;
+  const cur = now || saved;
+  return (
+    <div className="text-[11px] flex items-center gap-2 flex-wrap" style={{ color: cur === "error" ? "#8B2E24" : cur === "sheet" ? GREEN : "#8A5B14" }}>
+      <span>{savedNoteText(cur)}</span>
+      {cur === "error" && (
+        <button type="button" disabled={busy} className="underline" onClick={async () => { setBusy(true); const r = await ops.resave(); setBusy(false); setNow(r); }}>{busy ? "กำลังบันทึก..." : "ลองบันทึกอีกครั้ง"}</button>
+      )}
+      {onClear && <button type="button" className="underline" onClick={onClear}>ปิด</button>}
+    </div>
+  );
+}
+
+const defaultSectionName = () => (SECTION_OPTIONS.includes("Support Function") ? "Support Function" : SECTION_OPTIONS[0]);
+
+// เลือกฝ่าย (Section) + ปุ่มเพิ่มฝ่ายใหม่ได้ทันทีโดยไม่ต้องออกจากฟอร์ม
+function SectionPicker({ value, onChange, ops }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(null);
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await ops.sections.add(name);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    onChange(r.name); setSaved(r.saved); setAdding(false); setName(""); setErr("");
+  };
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <select value={value} onChange={(e) => onChange(e.target.value)} className="rounded-lg border px-2.5 py-1.5 text-sm" style={inputStyle} title="ฝ่าย (Section) ที่หน่วยงานนี้สังกัด ใช้จัดกลุ่มในแดชบอร์ด">
+          {SECTION_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        <button type="button" onClick={() => setAdding((a) => !a)} className="px-2 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap" style={{ borderColor: NAVY, color: NAVY }}>+ ฝ่ายใหม่</button>
+      </div>
+      {adding && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input autoFocus value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="ชื่อฝ่ายใหม่ เช่น Maintenance" className="rounded-lg border px-2.5 py-1 text-sm" style={inputStyle} />
+          <button type="button" onClick={submit} disabled={busy} className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white disabled:opacity-60" style={{ background: NAVY }}>{busy ? "กำลังเพิ่ม..." : "เพิ่มฝ่าย"}</button>
+          <button type="button" onClick={() => { setAdding(false); setErr(""); }} className="px-2.5 py-1 rounded-lg text-xs border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+        </div>
+      )}
+      {err && <div className="text-xs" style={{ color: "#8B2E24" }}>{err}</div>}
+      {saved && !adding && <div className="text-[11px]" style={{ color: saved === "error" ? "#8B2E24" : saved === "sheet" ? GREEN : "#8A5B14" }}>เพิ่มฝ่ายแล้ว · {savedNoteText(saved)}</div>}
+    </div>
+  );
+}
+
+function SectionAddForm({ ops, onDone, onCancel }) {
+  const [name, setName] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await ops.sections.add(name);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    onDone(r);
+  };
+  return (
+    <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#B9D2F0", background: "#F7FAFE" }}>
+      <div className="text-xs font-semibold" style={{ color: INK }}>เพิ่มฝ่าย (Section) ใหม่</div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input autoFocus value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="ชื่อฝ่ายใหม่ เช่น Maintenance" className="flex-1 min-w-[180px] rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} />
+        <button type="button" onClick={submit} disabled={busy} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: NAVY }}>{busy ? "กำลังเพิ่ม..." : "เพิ่มฝ่าย"}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+      </div>
+      <div className="text-[11px]" style={{ color: SUB }}>ฝ่ายใหม่ยังไม่มีหน่วยงาน กด "+ หน่วยงาน" ที่หัวฝ่าย หรือย้ายหน่วยงานเดิมเข้ามาด้วยปุ่มแก้ไขหน่วยงาน ฝ่ายใหม่จะแสดงในตัวกรองแดชบอร์ดด้วย</div>
+      {err && <div className="text-xs" style={{ color: "#8B2E24" }}>{err}</div>}
+    </div>
+  );
+}
+
+function SectionEditForm({ name, ops, onDone, onCancel }) {
+  const inSec = ops.sections.stats(name).departments;
+  const [newName, setNewName] = useState(name);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await ops.sections.rename(name, newName);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    onDone(r);
+  };
+  return (
+    <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#E8C77E", background: "#FFFBF2" }}>
+      <div className="text-xs font-semibold" style={{ color: INK }}>แก้ไขชื่อฝ่าย: {name}</div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input autoFocus value={newName} onChange={(e) => { setNewName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && submit()} className="flex-1 min-w-[180px] rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} />
+        <button type="button" onClick={submit} disabled={busy} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: GREEN }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+      </div>
+      <div className="text-[11px]" style={{ color: "#6B4A10" }}>ฝ่ายนี้มี {inSec.length} หน่วยงาน · เปลี่ยนชื่อแล้ว หน่วยงานและตัวกรอง/กราฟในแดชบอร์ดเปลี่ยนตามอัตโนมัติ (ไม่ต้องแก้ Kaizen)</div>
+      {err && <div className="text-xs" style={{ color: "#8B2E24" }}>{err}</div>}
+    </div>
+  );
+}
+
+function SectionDeleteConfirm({ name, ops, onDone, onCancel }) {
+  const can = ops.sections.canRemove(name);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await ops.sections.remove(name);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    onDone(r);
+  };
+  return (
+    <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#F0C3BD", background: "#FDF4F3" }}>
+      <div className="text-xs font-semibold" style={{ color: "#8B2E24" }}>ลบฝ่าย "{name}" ?</div>
+      {can.ok ? <div className="text-[11px]" style={{ color: INK }}>ฝ่ายนี้ไม่มีหน่วยงาน ลบได้ และจะหายจากตัวกรองในแดชบอร์ด</div> : <div className="text-xs" style={{ color: "#8B2E24" }}>{can.error}</div>}
+      {err && <div className="text-xs" style={{ color: "#8B2E24" }}>{err}</div>}
+      <div className="flex gap-2">
+        <button type="button" onClick={confirm} disabled={!can.ok || busy} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40" style={{ background: RED }}>{busy ? "กำลังลบ..." : "ยืนยันลบ"}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
+// จัดกลุ่มหน่วยงานตามฝ่าย: แสดงทุกฝ่ายตามลำดับในรายการ (รวมฝ่ายที่ยังไม่มีหน่วยงาน) แล้วต่อด้วยหน่วยงานที่ไม่มีฝ่าย
+function groupBySection(deptList) {
+  const m = {};
+  deptList.forEach((d) => { const sec = SECTION_MAP[d] || "อื่นๆ"; (m[sec] = m[sec] || []).push(d); });
+  const out = SECTION_OPTIONS.map((sec) => [sec, m[sec] || []]);
+  Object.keys(m).forEach((sec) => { if (!SECTION_OPTIONS.includes(sec)) out.push([sec, m[sec]]); });
+  return out;
+}
+
+function DeptAddForm({ ops, onDone, onCancel, defaultSection }) {
+  const [name, setName] = useState("");
+  const [section, setSection] = useState(defaultSection && SECTION_OPTIONS.includes(defaultSection) ? defaultSection : defaultSectionName());
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await ops.add(name, section);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    onDone(r);
+  };
+  return (
+    <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#B9D2F0", background: "#F7FAFE" }}>
+      <div className="text-xs font-semibold" style={{ color: INK }}>เพิ่มหน่วยงานใหม่</div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input autoFocus value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="ชื่อหน่วยงานใหม่ เช่น Packing 5" className="flex-1 min-w-[180px] rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} />
+        <SectionPicker value={section} onChange={setSection} ops={ops} />
+        <button type="button" onClick={submit} disabled={busy} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: NAVY }}>{busy ? "กำลังเพิ่ม..." : "เพิ่ม"}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+      </div>
+      <div className="text-[11px]" style={{ color: SUB }}>เลือกฝ่าย (Section) ที่หน่วยงานนี้สังกัด เพื่อให้แดชบอร์ดจัดกลุ่มถูกต้อง</div>
+      {err && <div className="text-xs" style={{ color: "#8B2E24" }}>{err}</div>}
+    </div>
+  );
+}
+
+function DeptEditForm({ name, ops, onDone, onCancel }) {
+  const st = ops.stats(name);
+  const [newName, setNewName] = useState(name);
+  const [section, setSection] = useState(SECTION_MAP[name] || defaultSectionName());
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const changed = newName.replace(/\s+/g, " ").trim() !== name;
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await ops.rename(name, newName, section);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    onDone(r);
+  };
+  return (
+    <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#E8C77E", background: "#FFFBF2" }}>
+      <div className="text-xs font-semibold" style={{ color: INK }}>แก้ไขหน่วยงาน: {name}</div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input autoFocus value={newName} onChange={(e) => { setNewName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && submit()} className="flex-1 min-w-[180px] rounded-lg border px-3 py-1.5 text-sm" style={inputStyle} />
+        <SectionPicker value={section} onChange={setSection} ops={ops} />
+        <button type="button" onClick={submit} disabled={busy} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: GREEN }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+      </div>
+      <div className="text-[11px]" style={{ color: "#6B4A10" }}>
+        หน่วยงานนี้มี Kaizen {st.kaizens} เรื่อง และมี {st.users.length} บัญชีใช้อยู่
+        {changed ? " · เมื่อเปลี่ยนชื่อ ระบบแก้ชื่อในบัญชีและ Kaizen เหล่านี้ให้ทั้งหมดอัตโนมัติ" + (st.kaizens > 0 ? " (อัปเดต Kaizen ทีละเรื่อง กรุณาอย่าปิดหน้าจนกว่าจะขึ้นสถานะบันทึกแล้ว)" : "") : ""}
+      </div>
+      {err && <div className="text-xs" style={{ color: "#8B2E24" }}>{err}</div>}
+    </div>
+  );
+}
+
+function DeptDeleteConfirm({ name, ops, onDone, onCancel }) {
+  const st = ops.stats(name);
+  const can = ops.canRemove(name);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await ops.remove(name);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    onDone(r);
+  };
+  return (
+    <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#F0C3BD", background: "#FDF4F3" }}>
+      <div className="text-xs font-semibold" style={{ color: "#8B2E24" }}>ลบหน่วยงาน "{name}" ออกจากระบบ?</div>
+      {can.ok ? (
+        <div className="text-[11px]" style={{ color: INK }}>
+          {st.users.length > 0 ? `หน่วยงานนี้จะถูกเอาออกจาก ${st.users.length} บัญชี (${st.users.map((u) => u.name).join(", ")}) ` : "ไม่มีบัญชีหรือ Kaizen ที่ใช้หน่วยงานนี้ "}
+          · มีผลกับทุกหน้าของระบบ
+        </div>
+      ) : (
+        <div className="text-xs" style={{ color: "#8B2E24" }}>{can.error}</div>
+      )}
+      {err && <div className="text-xs" style={{ color: "#8B2E24" }}>{err}</div>}
+      <div className="flex gap-2">
+        <button type="button" onClick={confirm} disabled={!can.ok || busy} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40" style={{ background: RED }}>{busy ? "กำลังลบ..." : "ยืนยันลบ"}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg text-sm border bg-white" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
+function TinyIcon({ icon: Icon, label, onClick, color }) {
+  return (
+    <button type="button" title={label} aria-label={label} onClick={onClick} className="p-0.5 rounded hover:bg-slate-100" style={{ color }}>
+      <Icon size={12} />
+    </button>
+  );
+}
+
+function UserFormModal({ mode, original, users, departments, deptOps, currentUser, focusPw, onClose, onSubmit }) {
   const isNew = mode === "new";
   const isJudge = original?.role === "judge";
   const isSelf = !!original && original.id === currentUser.id;
@@ -3947,13 +4246,15 @@ function UserFormModal({ mode, original, users, departments, currentUser, focusP
   const [saving, setSaving] = useState(false);
   const needsDept = f.role === "employee" || f.role === "supervisor";
   const set = (patch) => { setErrors([]); setF((x) => ({ ...x, ...patch })); };
+  const [deptPanel, setDeptPanel] = useState(null); // { type: "add" | "edit" | "delete", name? }
+  const [deptNote, setDeptNote] = useState(null);
+  const onSectionDone = (r) => { setDeptPanel(null); setDeptNote(r.saved); };
+  const onDeptAdded = (r) => { setDeptPanel(null); setDeptNote(r.saved); set({ departments: [...f.departments, r.name] }); };
+  const onDeptRenamed = (oldName, r) => { setDeptPanel(null); setDeptNote(r.saved); set({ departments: f.departments.map((d) => (d === oldName ? r.name : d)) }); };
+  const onDeptRemoved = (name, r) => { setDeptPanel(null); setDeptNote(r.saved); set({ departments: f.departments.filter((d) => d !== name) }); };
   const activeAdmins = users.filter((u) => u.role === "admin" && u.active !== false);
   const allDepts = useMemo(() => Array.from(new Set([...(departments || []), ...f.departments])), [departments, f.departments]);
-  const groups = useMemo(() => {
-    const m = {};
-    allDepts.forEach((d) => { const sec = SECTION_MAP[d] || "อื่นๆ"; (m[sec] = m[sec] || []).push(d); });
-    return Object.entries(m);
-  }, [allDepts]);
+  const groups = groupBySection(allDepts);
   const toggleDept = (d) => set({ departments: f.departments.includes(d) ? f.departments.filter((x) => x !== d) : [...f.departments, d] });
   const toggleGroup = (list) => {
     const all = list.every((d) => f.departments.includes(d));
@@ -4017,27 +4318,66 @@ function UserFormModal({ mode, original, users, departments, currentUser, focusP
           <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>เมื่อเปลี่ยนชื่อ ระบบเก็บชื่อเดิม "{original.name}" ไว้ให้ Kaizen ที่เคยส่งด้วยชื่อเดิมยังแสดงในบัญชีนี้</div>
         )}
         {needsDept && (
-          <div>
-            <div className="text-xs font-medium mb-1.5" style={{ color: SUB }}>
-              {f.role === "supervisor" ? "หน่วยงานที่ดูแล (อนุมัติเรื่องของหน่วยงานเหล่านี้)" : "หน่วยงานที่บัญชีนี้เลือกส่งเรื่องได้"} <span style={{ color: RED }}>*</span>
-              <span className="ml-2 font-normal" style={{ color: "#A3ABB8" }}>เลือกแล้ว {f.departments.length} หน่วยงาน</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="text-xs font-medium" style={{ color: SUB }}>
+                {f.role === "supervisor" ? "หน่วยงานที่ดูแล (อนุมัติเรื่องของหน่วยงานเหล่านี้)" : "หน่วยงานที่บัญชีนี้เลือกส่งเรื่องได้"} <span style={{ color: RED }}>*</span>
+                <span className="ml-2 font-normal" style={{ color: "#A3ABB8" }}>เลือกแล้ว {f.departments.length} หน่วยงาน</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={() => setDeptPanel({ type: "sec-add" })} className="text-xs font-medium px-2.5 py-1 rounded-lg border flex items-center gap-1" style={{ borderColor: NAVY, color: NAVY }}>
+                  <Plus size={13} /> เพิ่มฝ่ายใหม่
+                </button>
+                <button type="button" onClick={() => setDeptPanel({ type: "add" })} className="text-xs font-medium px-2.5 py-1 rounded-lg border flex items-center gap-1" style={{ borderColor: NAVY, color: NAVY }}>
+                  <Plus size={13} /> เพิ่มหน่วยงานใหม่
+                </button>
+              </div>
             </div>
-            <div className="rounded-lg border max-h-64 overflow-y-auto p-2 space-y-2" style={{ borderColor: "#D8DDE5" }}>
+            {deptPanel && deptPanel.type === "sec-add" && <SectionAddForm ops={deptOps} onDone={onSectionDone} onCancel={() => setDeptPanel(null)} />}
+            {deptPanel && deptPanel.type === "add" && <DeptAddForm key={deptPanel.section || "x"} defaultSection={deptPanel.section} ops={deptOps} onDone={onDeptAdded} onCancel={() => setDeptPanel(null)} />}
+            <div className="rounded-lg border max-h-72 overflow-y-auto p-2 space-y-2.5" style={{ borderColor: "#D8DDE5" }}>
               {groups.map(([sec, list]) => (
                 <div key={sec}>
-                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer" style={{ color: NAVY }}>
-                    <input type="checkbox" checked={list.every((d) => f.departments.includes(d))} onChange={() => toggleGroup(list)} /> {sec}
-                  </label>
+                  <div className="flex items-center gap-2">
+                    {list.length > 0 && <input type="checkbox" aria-label={`เลือกทั้งฝ่าย ${sec}`} checked={list.every((d) => f.departments.includes(d))} onChange={() => toggleGroup(list)} />}
+                    <span className="text-xs font-semibold" style={{ color: NAVY }}>{sec}</span>
+                    {sec !== "อื่นๆ" && (
+                      <>
+                        <button type="button" onClick={() => setDeptPanel({ type: "add", section: sec })} className="text-[11px] px-1.5 py-0.5 rounded border" style={{ borderColor: "#D8DDE5", color: SUB }} title={`เพิ่มหน่วยงานในฝ่าย ${sec}`}>+ หน่วยงาน</button>
+                        <TinyIcon icon={Pencil} label={`แก้ไขฝ่าย ${sec}`} color="#6A4BC9" onClick={() => setDeptPanel({ type: "sec-edit", name: sec })} />
+                        <TinyIcon icon={Trash2} label={`ลบฝ่าย ${sec}`} color={RED} onClick={() => setDeptPanel({ type: "sec-delete", name: sec })} />
+                      </>
+                    )}
+                  </div>
+                  {deptPanel && deptPanel.type === "sec-edit" && deptPanel.name === sec && (
+                    <div className="mt-2 pl-6"><SectionEditForm key={sec} name={sec} ops={deptOps} onDone={onSectionDone} onCancel={() => setDeptPanel(null)} /></div>
+                  )}
+                  {deptPanel && deptPanel.type === "sec-delete" && deptPanel.name === sec && (
+                    <div className="mt-2 pl-6"><SectionDeleteConfirm key={sec} name={sec} ops={deptOps} onDone={onSectionDone} onCancel={() => setDeptPanel(null)} /></div>
+                  )}
+                  {list.length === 0 && <div className="text-[11px] pl-6 mt-1" style={{ color: "#A3ABB8" }}>ยังไม่มีหน่วยงานในฝ่ายนี้ (กด "+ หน่วยงาน" เพื่อเพิ่ม)</div>}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 pl-6 mt-1">
                     {list.map((d) => (
-                      <label key={d} className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: INK }}>
-                        <input type="checkbox" checked={f.departments.includes(d)} onChange={() => toggleDept(d)} /> {d}
-                      </label>
+                      <span key={d} className="inline-flex items-center gap-1">
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: INK }}>
+                          <input type="checkbox" checked={f.departments.includes(d)} onChange={() => toggleDept(d)} /> {d}
+                        </label>
+                        <TinyIcon icon={Pencil} label={`แก้ไขหน่วยงาน ${d}`} color="#6A4BC9" onClick={() => setDeptPanel({ type: "edit", name: d })} />
+                        <TinyIcon icon={Trash2} label={`ลบหน่วยงาน ${d}`} color={RED} onClick={() => setDeptPanel({ type: "delete", name: d })} />
+                      </span>
                     ))}
                   </div>
+                  {deptPanel && deptPanel.type === "edit" && list.includes(deptPanel.name) && (
+                    <div className="mt-2 pl-6"><DeptEditForm key={deptPanel.name} name={deptPanel.name} ops={deptOps} onDone={(r) => onDeptRenamed(deptPanel.name, r)} onCancel={() => setDeptPanel(null)} /></div>
+                  )}
+                  {deptPanel && deptPanel.type === "delete" && list.includes(deptPanel.name) && (
+                    <div className="mt-2 pl-6"><DeptDeleteConfirm key={deptPanel.name} name={deptPanel.name} ops={deptOps} onDone={(r) => onDeptRemoved(deptPanel.name, r)} onCancel={() => setDeptPanel(null)} /></div>
+                  )}
                 </div>
               ))}
             </div>
+            <div className="text-[11px]" style={{ color: "#8A93A3" }}>ไอคอนดินสอ / ถังขยะข้างชื่อฝ่ายหรือหน่วยงาน = แก้ไข / ลบในระบบ มีผลกับทุกบัญชีและทุกหน้า (ไม่ใช่เฉพาะบัญชีนี้) · ฝ่ายใช้จัดกลุ่มหน่วยงานในแดชบอร์ด</div>
+            <DeptResultNote key={String(deptNote)} saved={deptNote} ops={deptOps} onClear={() => setDeptNote(null)} />
           </div>
         )}
         {(f.role === "admin" || f.role === "director") && (
@@ -4084,7 +4424,7 @@ function MiniBtn({ icon: Icon, label, onClick, color }) {
   );
 }
 
-function UserManager({ users, kaizens, departments, currentUser, onSave, syncMode }) {
+function UserManager({ users, kaizens, departments, deptOps, currentUser, onSave, syncMode }) {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [editor, setEditor] = useState(null); // { mode: "new" | "edit", user }
@@ -4276,6 +4616,7 @@ function UserManager({ users, kaizens, departments, currentUser, onSave, syncMod
           original={editor.user}
           users={users}
           departments={departments}
+          deptOps={deptOps}
           currentUser={currentUser}
           focusPw={editor.focusPw}
           onClose={() => setEditor(null)}
@@ -4544,7 +4885,17 @@ export default function KaizenApp() {
       .then((res) => {
         if (!alive || !res.supported) return;
         setUsersSync("sheet");
-        if (Array.isArray(res.users) && res.users.length) applyUsers(normalizeUsers(res.users));
+        if (Array.isArray(res.users) && res.users.length) {
+          const cfg = res.users.find((u) => u && u.id === "__config");
+          if (cfg) {
+            const deps = applyDeptConfig(cfg);
+            if (deps) {
+              setDepartments(deps);
+              setSectionList([...SECTION_OPTIONS]);
+            }
+          }
+          applyUsers(normalizeUsers(res.users.filter((u) => !(u && u.id === "__config"))));
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -4578,7 +4929,7 @@ export default function KaizenApp() {
   const saveUsersList = async (list) => {
     applyUsers(list);
     if (usersSync !== "sheet") return "local";
-    const ok = await saveUsersToSheet(list);
+    const ok = await saveUsersToSheet([...list, buildDeptConfigRow(departments)]);
     return ok ? "sheet" : "error";
   };
   const [kaizens, setKaizens] = useState(() => seedData().map(normalizeKaizen));
@@ -4604,6 +4955,7 @@ export default function KaizenApp() {
       });
   }, []);
   const [departments, setDepartments] = useState(DEFAULT_DEPARTMENTS);
+  const [, setSectionList] = useState(() => [...SECTION_OPTIONS]); // ใช้กระตุ้นให้หน้าจอวาดใหม่เมื่อรายการฝ่ายเปลี่ยน
   const [tab, setTab] = useStoredState("kz_tab", "dashboard");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -4696,6 +5048,124 @@ export default function KaizenApp() {
   };
 
   const updateKaizen = (id, patch) => setKaizens((list) => list.map((k) => (k.id === id ? { ...k, ...patch } : k)));
+
+  // ---------- จัดการหน่วยงาน (เพิ่ม / แก้ไข / ลบ) ----------
+  const deptStats = (name) => ({
+    kaizens: kaizens.filter((k) => k.department === name).length,
+    users: users.filter((u) => (u.departments || []).includes(name)),
+  });
+  const checkDeptName = (raw, exceptName) => {
+    const name = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!name) return { error: "กรุณาใส่ชื่อหน่วยงาน" };
+    if (name.length > 60) return { error: "ชื่อหน่วยงานยาวเกินไป (ไม่เกิน 60 ตัวอักษร)" };
+    if (departments.some((d) => d !== exceptName && d.toLowerCase() === name.toLowerCase())) return { error: `มีหน่วยงาน "${name}" อยู่แล้ว` };
+    return { name };
+  };
+  const persistDepts = async (nextDeps, nextUsers) => {
+    setDepartments(nextDeps);
+    if (nextUsers) applyUsers(nextUsers);
+    if (usersSync !== "sheet") return "local";
+    const ok = await saveUsersToSheet([...(nextUsers || users), buildDeptConfigRow(nextDeps)]);
+    return ok ? "sheet" : "error";
+  };
+  const canRemoveDept = (name) => {
+    const st = deptStats(name);
+    if (departments.length <= 1) return { ok: false, error: "ต้องมีหน่วยงานอย่างน้อย 1 หน่วยงาน" };
+    if (st.kaizens > 0) return { ok: false, error: `ลบไม่ได้: มี Kaizen ${st.kaizens} เรื่องอยู่ในหน่วยงานนี้ (ถ้าต้องการเปลี่ยนชื่อ ใช้ปุ่มแก้ไข)` };
+    const stranded = st.users.filter((u) => (u.role === "employee" || u.role === "supervisor") && (u.departments || []).filter((d) => d !== name).length === 0);
+    if (stranded.length) return { ok: false, error: `ลบไม่ได้: บัญชี ${stranded.map((u) => u.name).join(", ")} จะไม่เหลือหน่วยงานที่ดูแล ให้ย้ายหน่วยงานของบัญชีเหล่านั้นก่อน` };
+    return { ok: true };
+  };
+  const checkSectionName = (raw, exceptName) => {
+    const name = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!name) return { error: "กรุณาใส่ชื่อฝ่าย" };
+    if (name.length > 60) return { error: "ชื่อฝ่ายยาวเกินไป (ไม่เกิน 60 ตัวอักษร)" };
+    if (name === "อื่นๆ") return { error: 'ชื่อ "อื่นๆ" ใช้แทนหน่วยงานที่ยังไม่มีฝ่าย กรุณาใช้ชื่ออื่น' };
+    if (SECTION_OPTIONS.some((x) => x !== exceptName && x.toLowerCase() === name.toLowerCase())) return { error: `มีฝ่าย "${name}" อยู่แล้ว` };
+    return { name };
+  };
+  const sectionOps = {
+    list: () => [...SECTION_OPTIONS],
+    stats: (name) => ({ departments: departments.filter((d) => SECTION_MAP[d] === name) }),
+    add: async (raw) => {
+      const chk = checkSectionName(raw);
+      if (chk.error) return { ok: false, error: chk.error };
+      SECTION_OPTIONS.push(chk.name);
+      setSectionList([...SECTION_OPTIONS]);
+      const saved = await persistDepts(departments, null);
+      return { ok: true, name: chk.name, saved };
+    },
+    rename: async (oldName, raw) => {
+      const chk = checkSectionName(raw, oldName);
+      if (chk.error) return { ok: false, error: chk.error };
+      const idx = SECTION_OPTIONS.indexOf(oldName);
+      if (idx < 0) return { ok: false, error: "ไม่พบฝ่ายนี้" };
+      const n = departments.filter((d) => SECTION_MAP[d] === oldName).length;
+      SECTION_OPTIONS[idx] = chk.name;
+      Object.keys(SECTION_MAP).forEach((d) => { if (SECTION_MAP[d] === oldName) SECTION_MAP[d] = chk.name; });
+      setSectionList([...SECTION_OPTIONS]);
+      const saved = await persistDepts(departments, null);
+      return { ok: true, name: chk.name, saved, departments: n };
+    },
+    canRemove: (name) => {
+      const inSec = departments.filter((d) => SECTION_MAP[d] === name);
+      if (SECTION_OPTIONS.length <= 1) return { ok: false, error: "ต้องมีฝ่ายอย่างน้อย 1 ฝ่าย" };
+      if (inSec.length) return { ok: false, error: `ลบไม่ได้: ยังมี ${inSec.length} หน่วยงานอยู่ในฝ่ายนี้ (${inSec.slice(0, 4).join(", ")}${inSec.length > 4 ? " ..." : ""}) ให้ย้ายไปฝ่ายอื่นก่อน (ปุ่มแก้ไขหน่วยงาน แล้วเลือกฝ่ายใหม่)` };
+      return { ok: true };
+    },
+    remove: async (name) => {
+      const can = sectionOps.canRemove(name);
+      if (!can.ok) return can;
+      SECTION_OPTIONS.splice(SECTION_OPTIONS.indexOf(name), 1);
+      setSectionList([...SECTION_OPTIONS]);
+      const saved = await persistDepts(departments, null);
+      return { ok: true, saved };
+    },
+  };
+  const deptOps = {
+    sections: sectionOps,
+    stats: deptStats,
+    canRemove: canRemoveDept,
+    add: async (rawName, section) => {
+      const chk = checkDeptName(rawName);
+      if (chk.error) return { ok: false, error: chk.error };
+      SECTION_MAP[chk.name] = section && SECTION_OPTIONS.includes(section) ? section : SECTION_OPTIONS[0];
+      const saved = await persistDepts([...departments, chk.name], null);
+      return { ok: true, name: chk.name, saved };
+    },
+    rename: async (oldName, rawNew, section) => {
+      const chk = checkDeptName(rawNew, oldName);
+      if (chk.error) return { ok: false, error: chk.error };
+      const newName = chk.name;
+      const changed = newName !== oldName;
+      const st = deptStats(oldName);
+      const affected = kaizens.filter((k) => k.department === oldName);
+      const sec = section && SECTION_OPTIONS.includes(section) ? section : (SECTION_MAP[oldName] || SECTION_OPTIONS[0]);
+      if (changed) delete SECTION_MAP[oldName];
+      SECTION_MAP[newName] = sec;
+      const nextDeps = departments.map((d) => (d === oldName ? newName : d));
+      const nextUsers = changed
+        ? users.map((u) => ((u.departments || []).includes(oldName) ? { ...u, departments: u.departments.map((d) => (d === oldName ? newName : d)) } : u))
+        : users;
+      if (changed && affected.length) {
+        // แก้ชื่อหน่วยงานใน Kaizen เดิมทุกเรื่อง (อัปเดตลง Google Sheet ทีละเรื่อง ดูสถานะที่มุมขวาล่าง)
+        setKaizens((list) => list.map((k) => (k.department === oldName ? { ...k, department: newName } : k)));
+        affected.forEach((k) => syncKaizenToSheet("update", { ...k, department: newName }));
+      }
+      const saved = await persistDepts(nextDeps, nextUsers);
+      return { ok: true, name: newName, saved, kaizens: changed ? affected.length : 0, users: changed ? st.users.length : 0 };
+    },
+    remove: async (name) => {
+      const can = canRemoveDept(name);
+      if (!can.ok) return can;
+      const st = deptStats(name);
+      delete SECTION_MAP[name];
+      const nextUsers = users.map((u) => ((u.departments || []).includes(name) ? { ...u, departments: u.departments.filter((d) => d !== name) } : u));
+      const saved = await persistDepts(departments.filter((d) => d !== name), nextUsers);
+      return { ok: true, saved, users: st.users.length };
+    },
+    resave: () => persistDepts(departments, null),
+  };
 
   const saveForm = (formData, status) => {
     if (editing && editing.id) {
@@ -5090,7 +5560,7 @@ export default function KaizenApp() {
             </div>
             {showDeptManager && (
               <div className="mb-5">
-                <DepartmentManager departments={departments} onChange={setDepartments} />
+                <DepartmentManager departments={departments} ops={deptOps} />
               </div>
             )}
             <Table
@@ -5176,6 +5646,7 @@ export default function KaizenApp() {
             users={users}
             kaizens={kaizens}
             departments={departments}
+            deptOps={deptOps}
             currentUser={currentUser}
             onSave={saveUsersList}
             syncMode={usersSync}
