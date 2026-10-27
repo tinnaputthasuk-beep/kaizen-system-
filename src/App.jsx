@@ -202,7 +202,7 @@ const DEFAULT_USERS = [
   { id: "u22", name: "Engineering Team A", role: "employee", departments: ["Engineering Team A"], aliases: [], active: true, pw: { s: "24da189b0a09e93390ca1e794281fada", h: "3103bef797c6060187260c0fc7b8abb5fa568e632c87fbf2c6d058cc83d25034" } },
   { id: "u23", name: "Engineering Team B", role: "employee", departments: ["Engineering Team B"], aliases: [], active: true, pw: { s: "5005e873d9f76bc62ddaa6831138aa8f", h: "9849fc0babaa1f2cc924e4f67650e6de8d096c1ce9f77b23bd3b6d2aa9d903ef" } },
   { id: "u24", name: "Engineering Team C", role: "employee", departments: ["Engineering Team C"], aliases: [], active: true, pw: { s: "1bc87bed64754192b7c33d55b9b4917c", h: "81499c8ffff4ade108d85e545aa6175f8942b298252f90766463f0503e2b201e" } },
-  { id: "u25", name: "Water supply", role: "employee", departments: ["Boiler", "Water supply"], aliases: ["Boiler"], active: true, pw: { s: "b7eb42128e444dbb8d192f5ca198220a", h: "8f23ac3cfefb5991978e867bd98667a2b1491b6df835f3ac95d8813cb5c3625a" } },
+  { id: "u25", name: "Utility", role: "employee", departments: ["Boiler", "Water supply"], aliases: ["Boiler", "Water supply"], active: true, pw: { s: "b7eb42128e444dbb8d192f5ca198220a", h: "8f23ac3cfefb5991978e867bd98667a2b1491b6df835f3ac95d8813cb5c3625a" } },
   { id: "u26", name: "Finish Goods W/H (Dry)", role: "employee", departments: ["Finish Goods W/H (Dry)"], aliases: [], active: true, pw: { s: "9f31ef3d51b4d73e6aa7978fd85b2d5b", h: "ac27e1df1cc4365d43c1959aa93658eff7102337bee0cfb71712e7b86146f776" } },
   { id: "u27", name: "Finish Goods W/H (Fresh)", role: "employee", departments: ["Finish Goods W/H (Fresh)"], aliases: [], active: true, pw: { s: "ae67e4c8d8166fa62de250f2603eefc8", h: "6f397a5815fbd2cd58538ff25dcc9b082dbee64634c58ba606d6b991b889e55c" } },
   { id: "u28", name: "Raw Material W/H", role: "employee", departments: ["Raw Material W/H"], aliases: [], active: true, pw: { s: "c91663a7bc15cc07630005626f4b2d47", h: "da5ab18e9d4e94061365a7eaa78911c69544fb27ba1bf9e97ea2275e93324aa9" } },
@@ -4643,6 +4643,66 @@ function UserManager({ users, kaizens, departments, deptOps, currentUser, onSave
   );
 }
 
+function DeleteKaizenModal({ k, award, onConfirm, onClose }) {
+  const [reason, setReason] = useState("");
+  const [ack, setAck] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const winner = (award && award.decision && award.decision.winners || []).find((w) => w.id === k.id);
+  const inShortlist = ((award && award.shortlist) || []).includes(k.id);
+  const photos = asList(k.images?.before).length + asList(k.images?.after).length;
+  const files = (k.attachments || []).length;
+  const go = async () => {
+    if (busy || !ack || winner) return;
+    setBusy(true);
+    setErr("");
+    const r = await onConfirm(k, reason.trim());
+    setBusy(false);
+    if (!r.ok) setErr(r.error);
+  };
+  return (
+    <Modal title="ลบ Kaizen ออกจากระบบ" onClose={onClose}>
+      <div className="space-y-3">
+        <div className="rounded-lg border p-3" style={{ borderColor: "#F0C3BD", background: "#FDF4F3" }}>
+          <div className="text-[11px]" style={{ color: SUB }}>{k.registeredNo} · {k.date}</div>
+          <div className="text-sm font-semibold" style={{ color: INK }}>{k.title}</div>
+          <div className="text-xs mt-1 flex items-center gap-2 flex-wrap" style={{ color: SUB }}>
+            หน่วยงาน {k.department} · ผู้ส่ง {k.submittedBy} · <StatusBadge status={k.status} />
+          </div>
+        </div>
+        {winner && (
+          <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#FBEAE8", color: "#8B2E24" }}>
+            เรื่องนี้ได้รับ <strong>{winner.tier}</strong> จาก Kaizen Award ที่ประกาศผลแล้ว จึงลบไม่ได้ ให้ผู้อำนวยการกด "ยกเลิกการประกาศ & เปิดแก้ไข" ที่หน้า Kaizen Award ก่อน
+          </div>
+        )}
+        {inShortlist && !winner && (
+          <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#FDF3E1", color: "#6B4A10" }}>
+            เรื่องนี้ถูกส่งให้กรรมการตัดสิน Kaizen Award แล้ว การลบจะถอนเรื่องนี้ออกจากรายการของกรรมการด้วย (คะแนนของเรื่องนี้จะไม่ถูกนับอีก)
+          </div>
+        )}
+        <ul className="text-xs space-y-1" style={{ color: INK }}>
+          <li>• เรื่องนี้จะหายจากทุกหน้า (Dashboard, หน้าพนักงาน / หัวหน้างาน / ผู้อำนวยการ, Kaizen Award) และตัวเลขสรุปจะลดลงตาม</li>
+          <li>• เมื่อเชื่อม Google Sheet ข้อมูลจะถูกย้ายไปเก็บสำรองในชีต "KaizensDeleted" (พร้อมวันเวลา ผู้ลบ เหตุผล) ไม่ได้ลบทิ้งถาวร · รูป {photos} ใบ / ไฟล์แนบ {files} ไฟล์ ยังอยู่ใน Google Drive</li>
+          <li>• ระบบไม่ได้แจ้งผู้ส่งเรื่องอัตโนมัติ (การแจ้งเตือนในเว็บอยู่เฉพาะในหน้าจอที่ใช้งานอยู่) ควรแจ้งผู้ส่งเอง</li>
+        </ul>
+        <Field label="เหตุผลที่ลบ (ไม่บังคับ แต่แนะนำ: บันทึกไว้ในชีตสำรองเพื่อตรวจสอบย้อนหลัง)">
+          <TextInput value={reason} onChange={(e) => setReason(e.target.value)} placeholder="เช่น ส่งซ้ำ / ข้อมูลทดสอบ / ส่งผิดหน่วยงาน" />
+        </Field>
+        <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: INK }}>
+          <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> ยืนยันว่าต้องการลบเรื่องนี้ออกจากระบบ
+        </label>
+        {err && <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#FBEAE8", color: "#8B2E24" }}>{err}</div>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+          <button onClick={go} disabled={!ack || !!winner || busy} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-40" style={{ background: RED }}>
+            <Trash2 size={15} /> {busy ? "กำลังลบ..." : "ลบเรื่องนี้"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function SyncStatusBar() {
   const [snap, setSnap] = useState({ pending: 0, failed: [] });
   const [flash, setFlash] = useState(false);
@@ -4964,6 +5024,7 @@ export default function KaizenApp() {
   const [presenting, setPresenting] = useState(null);
   const [showDeptManager, setShowDeptManager] = useState(false);
   const [adminEditing, setAdminEditing] = useState(null);
+  const [deletingKaizen, setDeletingKaizen] = useState(null);
   const [adminListFilter, setAdminListFilter] = useState("all"); // all | noimage | incomplete
   const [adminSearch, setAdminSearch] = useState("");
   const [recalling, setRecalling] = useState(null);
@@ -5220,6 +5281,26 @@ export default function KaizenApp() {
     budget: "งบประมาณ", result: "ผลที่ได้รับ", costSaving: "Cost Saving", costSavingCalc: "วิธีคำนวณ", members: "สมาชิกทีม",
     categories: "หมวดหมู่", activityType: "ประเภทกิจกรรม", kaizenType: "ประเภท Kaizen", attachments: "ไฟล์แนบ",
   };
+  // Admin ลบ Kaizen: เมื่อเชื่อม Google Sheet จะรอให้เซิร์ฟเวอร์ยืนยันก่อนจึงลบออกจากหน้าจอ (ถ้าล้มเหลว เรื่องยังอยู่และแจ้งสาเหตุ)
+  const deleteKaizenRecord = async (k, reason) => {
+    if (!currentUser || currentUser.role !== "admin") return { ok: false, error: "เฉพาะ Admin เท่านั้นที่ลบ Kaizen ได้" };
+    if (((award && award.decision && award.decision.winners) || []).some((w) => w.id === k.id)) {
+      return { ok: false, error: "เรื่องนี้ได้รับรางวัล Kaizen Award ที่ประกาศผลแล้ว ลบไม่ได้ (ให้ผู้อำนวยการยกเลิกการประกาศก่อน)" };
+    }
+    if (syncState.tracking) {
+      const r = await postToSheet("delete", { id: k.id, registeredNo: k.registeredNo, deletedBy: currentUser.name, reason });
+      if (!r.ok) {
+        const old = /ไม่รู้จัก action/.test(r.error || "");
+        return { ok: false, error: old ? "Code.gs ที่ติดตั้งอยู่ยังเป็นเวอร์ชันเก่า (ยังไม่รองรับการลบ) ให้อัปเดต Code.gs เป็นฉบับล่าสุดแล้ว Deploy เวอร์ชันใหม่ก่อน" : `ลบไม่สำเร็จ: ${r.error || "ไม่ทราบสาเหตุ"}` };
+      }
+    }
+    setKaizens((list) => list.filter((x) => x.id !== k.id));
+    if (((award && award.shortlist) || []).includes(k.id)) changeAward({ ...award, shortlist: award.shortlist.filter((id) => id !== k.id) });
+    setDeletingKaizen(null);
+    setViewing(null);
+    return { ok: true };
+  };
+
   const adminSave = (formData, note) => {
     const original = adminEditing;
     if (!original || !canEditKaizen(currentUser, original)) return;
@@ -5569,6 +5650,7 @@ export default function KaizenApp() {
                 <>
                   <IconBtn icon={Presentation} label="นำเสนอ" onClick={() => setPresenting(k)} color={NAVY} />
                   <IconBtn icon={Pencil} label="แก้ไขข้อมูล / เพิ่มรูป" onClick={() => setAdminEditing(k)} color="#6A4BC9" />
+                  <IconBtn icon={Trash2} label="ลบ" onClick={() => setDeletingKaizen(k)} color={RED} />
                   <IconBtn icon={ClipboardList} label="ตรวจ/จัดหมวด" onClick={() => setReviewing(k)} color={GREEN} filled />
                 </>
               )}
@@ -5604,6 +5686,7 @@ export default function KaizenApp() {
                   <>
                     <IconBtn icon={Eye} label="ดู" onClick={() => setViewing(k)} color={NAVY} />
                     <IconBtn icon={Pencil} label="แก้ไขข้อมูล / เพิ่มรูป" onClick={() => setAdminEditing(k)} color="#6A4BC9" />
+                    <IconBtn icon={Trash2} label="ลบ" onClick={() => setDeletingKaizen(k)} color={RED} />
                     <IconBtn icon={Presentation} label="นำเสนอ" onClick={() => setPresenting(k)} color={GOLD} />
                   </>
                 )}
@@ -5699,18 +5782,33 @@ export default function KaizenApp() {
           wide
           headerExtra={
             canEditKaizen(currentUser, viewing) && (
-              <button
-                onClick={() => { setAdminEditing(viewing); setViewing(null); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
-                style={{ background: "#6A4BC9" }}
-              >
-                <Pencil size={13} /> แก้ไขข้อมูล / เพิ่มรูป
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setAdminEditing(viewing); setViewing(null); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+                  style={{ background: "#6A4BC9" }}
+                >
+                  <Pencil size={13} /> แก้ไขข้อมูล / เพิ่มรูป
+                </button>
+                {currentUser.role === "admin" && (
+                  <button
+                    onClick={() => setDeletingKaizen(viewing)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-white"
+                    style={{ borderColor: RED, color: RED }}
+                  >
+                    <Trash2 size={13} /> ลบเรื่องนี้
+                  </button>
+                )}
+              </div>
             )
           }
         >
           <DetailView k={viewing} />
         </Modal>
+      )}
+
+      {deletingKaizen && currentUser.role === "admin" && (
+        <DeleteKaizenModal key={deletingKaizen.id} k={deletingKaizen} award={award} onConfirm={deleteKaizenRecord} onClose={() => setDeletingKaizen(null)} />
       )}
 
       {adminEditing && (
