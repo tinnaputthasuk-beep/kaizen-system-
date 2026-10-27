@@ -694,6 +694,24 @@ function toSheetRecord(record) {
   };
 }
 
+// เรียงรายการ Kaizen: เรื่องที่ส่งเข้ามาล่าสุดอยู่บน เรื่องที่ส่งมาก่อนอยู่ล่าง
+// (วันที่ส่งใหม่ก่อน ถ้าวันเดียวกันดูเลขที่ล่าสุดก่อน เช่น KZ-2026-147 อยู่เหนือ KZ-2026-146)
+const regSeq = (k) => {
+  const m = String(k.registeredNo || "").match(/(\d+)\s*$/);
+  return m ? parseInt(m[1], 10) : 0;
+};
+function sortNewestFirst(list) {
+  return [...list].sort((a, b) => {
+    const da = String(a.date || "").slice(0, 10);
+    const db = String(b.date || "").slice(0, 10);
+    if (da !== db) return da < db ? 1 : -1;
+    const sa = regSeq(a);
+    const sb = regSeq(b);
+    if (sa !== sb) return sb - sa;
+    return String(b.id).localeCompare(String(a.id));
+  });
+}
+
 // Kaizen ที่นับเป็น "ยอดการส่ง Kaizen": หัวหน้างานอนุมัติแล้ว และประเภทกิจกรรม = Kaizen (ไม่นับ Suggestion)
 const SUPERVISOR_APPROVED = ["pending_admin", "pending_director", "approved"];
 const isCountedKaizen = (k) => SUPERVISOR_APPROVED.includes(k.status) && (k.activityType || "Kaizen") === "Kaizen";
@@ -928,7 +946,7 @@ function RowFilterBar({ flt, total, dark }) {
         <button type="button" onClick={flt.clear} className="text-xs underline px-1" style={{ color: dark ? "white" : DB_BLUE }}>ล้างตัวกรอง</button>
       )}
       <span className="ml-auto text-[11px]" style={{ color: dark ? "rgba(255,255,255,0.7)" : SUB }}>
-        แสดง {flt.filtered.length} จาก {total} รายการ
+        แสดง {flt.filtered.length} จาก {total} รายการ · เรียงเรื่องที่ส่งล่าสุดไว้บน
       </span>
     </div>
   );
@@ -1962,8 +1980,9 @@ function PresentationView({ k }) {
 }
 
 function Table({ rows, actions, showMissing, filterable = true }) {
-  const flt = useKaizenFilters(rows);
-  const shown = filterable ? flt.filtered : rows;
+  const ordered = useMemo(() => sortNewestFirst(rows), [rows]);
+  const flt = useKaizenFilters(ordered);
+  const shown = filterable ? flt.filtered : ordered;
   return (
     <div>
       {filterable && rows.length > 0 && (
@@ -2227,7 +2246,8 @@ const DB_PALE = "#EAF3FC";
 const DB_BORDER = "#D3E4F7";
 
 function FilterableKaizenTable({ rows, onRowClick, onPresent }) {
-  const flt = useKaizenFilters(rows);
+  const ordered = useMemo(() => sortNewestFirst(rows), [rows]);
+  const flt = useKaizenFilters(ordered);
   const filteredRows = flt.filtered;
   const thBase = { color: "#EAF3FC", fontWeight: 600 };
 
@@ -2334,7 +2354,7 @@ function Dashboard({ data, departments, onView, onPresent }) {
     if (vals.length > 0) setDeptFilter((prev) => prev.filter((d) => vals.includes(SECTION_MAP[d])));
   };
 
-  const filtered = data.filter((k) => {
+  const filtered = sortNewestFirst(data.filter((k) => {
     const y = k.date.slice(0, 4);
     const m = k.date.slice(5, 7);
     const has = (list, v) => list.length === 0 || list.includes(v);
@@ -2347,7 +2367,7 @@ function Dashboard({ data, departments, onView, onPresent }) {
     if (!has(activityFilter, k.activityType)) return false;
     if (!has(kaizenTypeFilter, k.kaizenType)) return false;
     return true;
-  });
+  }));
   // ยอดการส่ง Kaizen = หัวหน้างานอนุมัติแล้ว และเป็นประเภทกิจกรรม Kaizen เท่านั้น (ไม่นับ Suggestion)
   const counted = useMemo(() => filtered.filter(isCountedKaizen), [filtered]);
 
