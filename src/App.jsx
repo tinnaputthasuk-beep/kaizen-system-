@@ -4,7 +4,8 @@ import {
   CheckCircle2, XCircle, Upload, X, Filter, ClipboardList, Presentation,
   Users, TrendingUp, ChevronRight, ImageOff, LogOut, Lock, KeyRound, AlertTriangle, Clock,
   Download, Coins, Bell, BellRing, Undo2, Paperclip, FileVideo, FileSpreadsheet, FileText, ZoomIn,
-  Trophy, Medal, Plus, Trash2, Star, ImagePlus, Printer, ChevronLeft, ChevronDown, Search
+  Trophy, Medal, Plus, Trash2, Star, ImagePlus, Printer, ChevronLeft, ChevronDown, Search,
+  BookOpen, ClipboardCheck, DoorOpen, Lightbulb
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
@@ -19,6 +20,740 @@ const COMPANY_LOGO_FALLBACK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlg
 const useLogoFallback = (e) => {
   if (e.currentTarget.src !== COMPANY_LOGO_FALLBACK) e.currentTarget.src = COMPANY_LOGO_FALLBACK;
 };
+
+const APP_NAME = "Food Solutions - Improvement System";
+// ======================================================================
+// ระบบสลับภาษา (ไทย / English / မြန်မာ) — ครอบคลุม: Login, หน้าสองประตู, เมนู, หัวข้อหน้า,
+// สถานะ Kaizen/OPL, ฟอร์มส่ง Kaizen, ตาราง/ปุ่มคำสั่งที่ใช้ร่วมกัน, Dashboard (หัวข้อ+การ์ด),
+// และหน้า OPL ทั้งหมด (คลัง/ของฉัน/ตรวจ/รายละเอียด/ฟอร์ม/ใบ OPL)
+// ยังไม่ครอบคลุม: Kaizen Award, จัดการผู้ใช้/หน่วยงาน/ฝ่าย, ตัวกรอง Dashboard แบบละเอียด, กราฟ (ยังเป็นภาษาไทย)
+// ======================================================================
+const LANGS = ["th", "en", "mm"];
+const LANG_LABELS = { th: "ไทย", en: "English", mm: "မြန်မာ" };
+const I18N = {
+  th: {
+  "login.subtitle": "เข้าสู่ระบบตามสิทธิ์การใช้งาน",
+  "login.usernameLabel": "ชื่อผู้ใช้ (พิมพ์ค้นหาหรือเลือกจากรายชื่อ)",
+  "login.usernamePlaceholder": "พิมพ์ชื่อหน่วยงาน หรือชื่อ-นามสกุล",
+  "login.passwordLabel": "รหัสผ่าน",
+  "login.passwordPlaceholder": "รหัสผ่านของท่าน",
+  "login.loginBtn": "เข้าสู่ระบบ",
+  "login.loadingUsers": "กำลังโหลดรายชื่อผู้ใช้...",
+  "login.checking": "กำลังตรวจสอบ...",
+  "login.forgot": "ลืมรหัสผ่าน หรือขอบัญชีใหม่ ติดต่อฝ่ายทรัพยากรบุคคล",
+  "login.noUserFound": "ไม่พบผู้ใช้งานที่ตรงกัน",
+  "login.wrongCredentials": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+  "login.lockedMsg": "กรอกรหัสผิดหลายครั้ง กรุณารอ {sec} วินาทีแล้วลองใหม่",
+  "login.disabledAccount": "บัญชีนี้ถูกปิดการใช้งาน กรุณาติดต่อ Admin",
+  "login.browserError": "เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดเว็บผ่านลิงก์ https",
+  "login.multipleAccounts": "มี {n} บัญชีใช้ชื่อนี้ (แยกด้วยรหัสผ่าน)",
+  "login.moreDepartments": "{list} และอีก {n} หน่วยงาน",
+  "gate.hello": "สวัสดี",
+  "gate.choosePrompt": "เลือกประตูที่ต้องการเข้า",
+  "gate.enterDoor": "เข้าประตูที่ {n}",
+  "gate.logoutTitle": "ออกจากระบบ",
+  "gate.manageUsers": "จัดการผู้ใช้",
+  "gate.door1.sub": "KAIZEN & SUGGESTION",
+  "gate.door1.title": "Kaizen",
+  "gate.door1.desc": "ส่งข้อเสนอปรับปรุงงาน แนบภาพก่อน–หลัง ติดตามสถานะการอนุมัติ ดูแดชบอร์ด และประกวด Kaizen Award",
+  "gate.door2.sub": "ONE POINT LESSON",
+  "gate.door2.title": "One Point Lesson",
+  "gate.door2.desc": "บทเรียนหนึ่งประเด็นตามแนว TPM สร้างใบ OPL แบ่งปันความรู้ ค้นหาในคลัง พิมพ์ติดหน้างาน และลงชื่อผู้เรียนรู้",
+  "gate.stat.kaizenEmployee": "Kaizen ของฉัน {n} เรื่อง",
+  "gate.stat.kaizenPending": "รออนุมัติ {n} เรื่อง",
+  "gate.stat.kaizenReview": "รอตรวจ {n} เรื่อง",
+  "gate.stat.oplEmployee": "OPL ของฉัน {my} · ในคลัง {pub}",
+  "gate.stat.oplReview": "รอตรวจ {pending} · ในคลัง {pub}",
+  "gate.stat.oplOther": "ในคลัง {pub} เรื่อง",
+  "nav.dashboard": "แดชบอร์ด",
+  "nav.employee": "พนักงาน",
+  "nav.supervisor": "หัวหน้างาน",
+  "nav.admin": "Admin",
+  "nav.director": "ผู้อำนวยการ",
+  "nav.award": "Kaizen Award",
+  "nav.users": "จัดการผู้ใช้",
+  "nav.judge": "ให้คะแนน Kaizen Award",
+  "nav.oplLibrary": "คลัง OPL",
+  "nav.oplMine": "OPL ของฉัน",
+  "nav.oplManage": "ตรวจ / จัดการ OPL",
+  "role.employee": "พนักงาน",
+  "role.supervisor": "หัวหน้างาน",
+  "role.admin": "Admin (ฝ่ายบุคคล)",
+  "role.director": "ผู้อำนวยการโรงงาน",
+  "role.judge": "กรรมการตัดสิน Kaizen Award",
+  "header.kaizenSubtitle": "ระบบบริหารจัดการข้อเสนอ Kaizen & Suggestion",
+  "header.oplSubtitle": "บทเรียนหนึ่งประเด็น (OPL) ตามแนว TPM",
+  "header.home": "หน้าหลัก",
+  "header.homeTitle": "กลับหน้าเลือกประตู",
+  "header.notifTitle": "การแจ้งเตือน",
+  "status.draft": "แบบร่าง",
+  "status.pending_supervisor": "รอหัวหน้างานอนุมัติ",
+  "status.pending_admin": "รอ Admin ตรวจสอบ",
+  "status.pending_director": "รอผู้อำนวยการอนุมัติ",
+  "status.approved": "อนุมัติแล้ว",
+  "status.rejected": "ถูกตีกลับ",
+  "opl.status.draft": "แบบร่าง",
+  "opl.status.pending": "รอหัวหน้างานตรวจ",
+  "opl.status.published": "เผยแพร่แล้ว",
+  "opl.status.returned": "ถูกตีกลับ",
+  "opl.category.basic": "ความรู้พื้นฐาน",
+  "opl.category.problem": "ตัวอย่างกรณีปัญหา",
+  "opl.category.improvement": "ตัวอย่างการปรับปรุง",
+  "opl.photo.basicA": "ภาพประกอบ / แผนภาพ 1",
+  "opl.photo.basicB": "ภาพประกอบ / แผนภาพ 2",
+  "opl.photo.ng": "ภาพปัญหา (NG)",
+  "opl.photo.ok": "ภาพที่ถูกต้อง (OK)",
+  "opl.photo.before": "ก่อนปรับปรุง",
+  "opl.photo.after": "หลังปรับปรุง",
+  "opl.guide.header": "เรียนรู้เรื่อง OPL ก่อนเริ่มใช้งาน",
+  "common.view": "ดู",
+  "common.edit": "แก้ไข",
+  "common.delete": "ลบ",
+  "common.cancel": "ยกเลิก",
+  "common.save": "บันทึก",
+  "common.confirm": "ยืนยัน",
+  "common.print": "พิมพ์",
+  "common.download": "ดาวน์โหลด",
+  "common.add": "เพิ่ม",
+  "common.search": "ค้นหา",
+  "common.all": "ทั้งหมด",
+  "common.clearFilters": "ล้างตัวกรอง",
+  "common.notFound": "ไม่พบรายการ",
+  "common.present": "นำเสนอ",
+  "common.notifications": "การแจ้งเตือน",
+  "common.markAllRead": "อ่านทั้งหมด",
+  "common.noNotifications": "ยังไม่มีการแจ้งเตือน",
+  "table.no": "เลขที่ / วันที่",
+  "table.title": "เรื่อง",
+  "table.dept": "หน่วยงาน",
+  "table.category": "หมวดหมู่",
+  "table.status": "สถานะ",
+  "table.actions": "จัดการ",
+  "table.showing": "แสดง {shown} จาก {total} รายการ",
+  "table.sortedNewest": "เรียงเรื่องที่ส่งล่าสุดไว้บน",
+  "table.searchFilter": "ค้นหา / กรอง",
+  "kform.title": "หัวเรื่อง / ชื่อโครงการ",
+  "kform.titlePlaceholder": "เช่น รถเข็นเครื่องชั่งดิจิตอลแบบตั้งโต๊ะ",
+  "kform.team": "ชื่อทีม",
+  "kform.teamPlaceholder": "เช่น ทีม Safety บรรจุ 3",
+  "kform.dept": "หน่วยงาน",
+  "kform.submittedBy": "ผู้ส่งเรื่อง (ชื่อ-นามสกุล)",
+  "kform.submittedByPlaceholder": "ชื่อ นามสกุล",
+  "kform.activityType": "ประเภทกิจกรรม",
+  "kform.problem": "1. ที่มาของปัญหาและสถานการณ์ปัจจุบัน",
+  "kform.problemPlaceholder": "อธิบายปัญหาที่พบก่อนการปรับปรุง",
+  "kform.improvement": "2. แนวทางการปรับปรุง Improvement Idea",
+  "kform.improvementPlaceholder": "อธิบายวิธีการแก้ไข/ปรับปรุง",
+  "kform.budget": "3. งบประมาณที่ใช้ในการปรับปรุง",
+  "kform.budgetHint": "ใส่แค่ตัวเลข (บาท) และถ้าไม่มี ใส่เลข 0",
+  "kform.result": "4. ผลที่ได้รับ",
+  "kform.resultPlaceholder": "กรอกภายหลังหากยังไม่มีผลลัพธ์",
+  "kform.costSaving": "5. Cost Saving ที่ได้",
+  "kform.costSavingHint": "ใส่แค่ตัวเลข (บาท ต่อปี) หากไม่มีให้ใส่เลข 0",
+  "kform.costSavingCalc": "6. การคำนวณผลลัพธ์ (หากมี Cost Saving)",
+  "kform.costSavingCalcPlaceholder": "เช่น วิธีคิด/สูตรคำนวณ Cost Saving",
+"kform.costSavingCalcHint": "หากไม่มี Cost Saving ไม่ต้องระบุข้อนี้",
+  "kform.imageBefore": "ภาพก่อนปรับปรุง (Before)",
+  "kform.imageAfter": "ภาพหลังปรับปรุง (After)",
+  "kform.busyNote": "กำลังย่อขนาดรูป รอสักครู่ ปุ่มบันทึกจะกดได้เมื่อเสร็จ...",
+  "kform.saveDraft": "บันทึกแบบร่าง",
+  "kform.submit": "ส่งเรื่อง",
+  "kform.saveEdit": "บันทึกการแก้ไข",
+  "dash.title": "ภาพรวม Kaizen ทั้งโรงงาน",
+  "dash.subtitle": "ติดตามสถานะ กรองข้อมูลตามหมวดหมู่ หน่วยงาน และสถานะแบบเรียลไทม์",
+  "dash.kpiTotal": "Kaizen รวมทั้งหมด",
+  "dash.kpiCostSaving": "มูลค่า Cost Saving",
+  "dash.kpiProject": "Kaizen Project",
+  "dash.kpiCross": "Cross Functional Kaizen",
+  "dash.exportExcel": "Export Excel",
+  "page.employee.title": "รายการ Kaizen ของฉัน",
+  "page.supervisor.title": "อนุมัติ Kaizen (หัวหน้างาน)",
+  "page.admin.title": "ตรวจสอบและจัดหมวดหมู่ (Admin)",
+  "page.director.title": "รออนุมัติขั้นสุดท้าย (ผู้อำนวยการโรงงาน)",
+  "page.newKaizen": "ส่งเรื่อง Kaizen ใหม่",
+  "opl.mine.title": "OPL ของฉัน",
+  "opl.mine.subtitle": "สร้างใบ One Point Lesson ส่งให้หัวหน้างานตรวจ แล้วเผยแพร่เข้าคลัง",
+  "opl.mine.newBtn": "สร้าง OPL ใหม่",
+  "opl.mine.empty": "ยังไม่มี OPL กด \"สร้าง OPL ใหม่\" เพื่อเริ่มต้น",
+  "opl.manage.titleAdmin": "ตรวจ / จัดการ OPL (Admin)",
+  "opl.manage.titleDept": "ตรวจ / จัดการ OPL (หน่วยงานที่ดูแล)",
+  "opl.manage.subtitle": "ตรวจ OPL ที่ส่งเข้ามา อนุมัติเผยแพร่หรือตีกลับ และแก้ไขข้อมูล",
+  "opl.manage.adminDeleteNote": "ลบ OPL ได้เฉพาะ Admin",
+  "opl.manage.pending": "รอตรวจ",
+  "opl.manage.all": "ทั้งหมด",
+  "opl.manage.allStatus": "ทุกสถานะ",
+  "opl.manage.emptyPending": "ไม่มี OPL ที่รอตรวจ",
+  "opl.manage.review": "ตรวจสอบ",
+  "opl.detail.downloadPng": "ดาวน์โหลดเป็นรูปภาพ (PNG)",
+  "opl.detail.printPdf": "พิมพ์ / บันทึกเป็น PDF",
+  "opl.detail.generating": "กำลังสร้างรูปภาพ...",
+  "opl.detail.signTitle": "ลงชื่อผู้เรียนรู้",
+  "opl.detail.signDesc": "อ่านและเข้าใจ OPL นี้แล้ว เลือกฝ่าย/หน่วยงาน พิมพ์ชื่อ-สกุลของผู้เรียนรู้ แล้วกดบันทึก (หนึ่งชื่อต่อหนึ่งครั้ง)",
+  "opl.detail.section": "ฝ่าย (Section)",
+  "opl.detail.unit": "หน่วยงาน (Unit)",
+  "opl.detail.learnerName": "ชื่อ-สกุลผู้เรียนรู้",
+  "opl.detail.signBtn": "บันทึกว่าเรียนรู้แล้ว",
+  "opl.detail.reviewTitle": "ตรวจสอบ OPL ฉบับนี้",
+  "opl.detail.commentPlaceholder": "ความเห็น (จำเป็นเมื่อตีกลับ)",
+  "opl.detail.returnBtn": "ตีกลับให้แก้ไข",
+  "opl.detail.approveBtn": "อนุมัติและเผยแพร่",
+  "opl.detail.history": "ประวัติ",
+  "opl.delete.title": "ลบ OPL ออกจากระบบ",
+  "opl.delete.note": "เมื่อเชื่อม Google Sheet ข้อมูลจะถูกย้ายไปสำรองในชีต \"OPLDeleted\" (ไม่ลบทิ้งถาวร) รูปใน Google Drive ยังอยู่",
+  "opl.delete.reason": "เหตุผลที่ลบ (ไม่บังคับ)",
+  "opl.delete.reasonPlaceholder": "เช่น ซ้ำ / ข้อมูลทดสอบ",
+  "opl.delete.confirm": "ยืนยันว่าต้องการลบ OPL นี้",
+  "opl.sheet.theme": "เรื่อง (Theme)",
+  "opl.sheet.why": "ทำไมต้องรู้",
+  "opl.sheet.keyPoints": "ประเด็นสำคัญ (Key Points)",
+  "opl.sheet.ok": "OK · ควรทำ",
+  "opl.sheet.ng": "NG · ห้ามทำ",
+  "opl.sheet.note": "ข้อควรระวัง:",
+  "opl.sheet.training": "บันทึกผู้เรียนรู้ (Training Record)",
+  "opl.sheet.learnerName": "ชื่อผู้เรียนรู้",
+  "opl.sheet.section": "ฝ่าย",
+  "opl.sheet.unit": "หน่วยงาน",
+  "opl.sheet.date": "วันที่",
+  "opl.sheet.no": "เลขที่ OPL",
+"opl.sheet.dept": "หน่วยงาน",
+  "opl.sheet.preparedBy": "ผู้จัดทำ",
+  "opl.sheet.preparerReviewer": "ผู้จัดทำ / ผู้ตรวจ",
+  "opl.sheet.reviewer": "ผู้ตรวจ / เผยแพร่",
+  "opl.sheet.footerNote": "OPL = เรียนรู้ได้ใน 1 ประเด็น ภายใน 5–10 นาที · ลงชื่อผู้เรียนรู้ทุกครั้งที่ได้เรียนรู้",
+  "opl.form.newTitle": "สร้าง One Point Lesson ใหม่",
+"opl.form.editTitle": "แก้ไข OPL: {no}",
+  "opl.form.categoryLabel": "ประเภท OPL",
+  "opl.form.titleLabel": "หัวข้อ OPL (Theme)",
+  "opl.form.titlePlaceholder": "เช่น วิธีสวมถุงมือให้ถูกต้องก่อนเข้าพื้นที่ผลิต (หนึ่งเรื่อง ต่อหนึ่งใบ)",
+  "opl.form.deptLabel": "หน่วยงาน",
+  "opl.form.preparedByLabel": "ผู้จัดทำ (ชื่อบุคคลหรือทีม)",
+  "opl.form.preparedByPlaceholder": "เช่น สมชาย / ทีม Packing 1",
+  "opl.form.whyLabel": "ทำไมต้องรู้ (ความสำคัญ)",
+  "opl.form.whyHint": "สั้นๆ 1–2 ประโยค ให้คนอ่านเห็นว่าเรื่องนี้เกี่ยวกับเขาอย่างไร",
+  "opl.form.keyPointsLabel": "ประเด็นสำคัญ (Key Points)",
+  "opl.form.keyPointsHint": "แนะนำ 3–5 ข้อ ข้อละ 1 บรรทัด สั้นและชัด",
+  "opl.form.keyPointPlaceholder": "เช่น ล้างมือด้วยสบู่อย่างน้อย 20 วินาที",
+  "opl.form.addLine": "เพิ่มข้อ",
+  "opl.form.dosPlaceholder": "สิ่งที่ถูกต้อง",
+  "opl.form.dontsPlaceholder": "สิ่งที่ผิด",
+  "opl.form.noteLabel": "ข้อควรระวังเพิ่มเติม (ถ้ามี)",
+  "opl.form.pillarsLabel": "หมวดที่เกี่ยวข้อง (เลือกได้หลายหมวด)",
+  "opl.form.submitEmployee": "ส่งให้หัวหน้างานตรวจ",
+  "opl.form.submitReviewer": "เผยแพร่ OPL",
+  "opl.form.missingPrefix": "กรุณากรอก:",
+  "opl.form.pleaseFixResend": "กรุณาแก้ไขแล้วส่งใหม่",
+"opl.form.returnedBy": "ถูกตีกลับโดย",
+"opl.detail.learnedCount": "เรียนรู้แล้ว {n} คน",
+"opl.detail.pngMissing": "ดาวน์โหลดแล้ว แต่รูป {missing} ใบจาก {total} ใบ ไม่ขึ้นในไฟล์ภาพ ลองอัปเดต Code.gs เป็นเวอร์ชันล่าสุด หรือใช้ปุ่ม พิมพ์ / บันทึกเป็น PDF",
+"opl.detail.pngError": "ดาวน์โหลดเป็นรูปภาพไม่สำเร็จ ลองใช้ปุ่ม พิมพ์ / บันทึกเป็น PDF แทน",
+"opl.detail.ackSuccess": "บันทึกชื่อผู้เรียนรู้แล้ว",
+"opl.detail.reviewReturnError": "กรุณาใส่ความเห็นเมื่อตีกลับ เพื่อให้ผู้จัดทำรู้ว่าต้องแก้อะไร",
+"opl.library.title": "คลัง One Point Lesson",
+"opl.library.subtitle": "บทเรียนหนึ่งประเด็น เรียนรู้ได้ใน 5 นาที ค้นหา อ่าน และลงชื่อผู้เรียนรู้ได้ที่นี่",
+"opl.library.searchPlaceholder": "ค้นหาหัวข้อ / หน่วยงาน / ประเด็น",
+"opl.library.allDept": "ทุกหน่วยงาน",
+"opl.library.emptyNone": "ยังไม่มี OPL ที่เผยแพร่ในคลัง",
+"opl.library.emptyFiltered": "ไม่พบ OPL ตามเงื่อนไข",
+"opl.table.submittedBy": "ส่งโดย {name}",
+"dash.kpiTotalSub": "เฉพาะที่หัวหน้างานอนุมัติแล้ว",
+"dash.kpiProjectSub": "โครงการปรับปรุงเดี่ยว",
+"dash.kpiCrossSub": "โครงการข้ามสายงาน",
+"dash.kpiCostSavingSub": "บาท/ปี จาก Kaizen ที่นับ",
+},
+  en: {
+  "login.subtitle": "Sign in according to your access level",
+  "login.usernameLabel": "Username (type to search or choose from the list)",
+  "login.usernamePlaceholder": "Type a department or your full name",
+  "login.passwordLabel": "Password",
+  "login.passwordPlaceholder": "Your password",
+  "login.loginBtn": "Log in",
+  "login.loadingUsers": "Loading user list...",
+  "login.checking": "Checking...",
+  "login.forgot": "Forgot your password or need a new account? Contact HR.",
+  "login.noUserFound": "No matching user found",
+  "login.wrongCredentials": "Incorrect username or password",
+  "login.lockedMsg": "Too many incorrect attempts. Please wait {sec} seconds and try again.",
+  "login.disabledAccount": "This account has been disabled. Please contact Admin.",
+  "login.browserError": "This browser cannot verify the password. Please open the site using an https link.",
+  "login.multipleAccounts": "{n} accounts use this name (tell them apart by password)",
+  "login.moreDepartments": "{list} and {n} more departments",
+  "gate.hello": "Hello",
+  "gate.choosePrompt": "Choose the door you want to enter",
+  "gate.enterDoor": "Enter Door {n}",
+  "gate.logoutTitle": "Log out",
+  "gate.manageUsers": "Manage Users",
+  "gate.door1.sub": "KAIZEN & SUGGESTION",
+  "gate.door1.title": "Kaizen",
+  "gate.door1.desc": "Submit improvement ideas, attach before-after photos, track approval status, view the dashboard, and join the Kaizen Award",
+  "gate.door2.sub": "ONE POINT LESSON",
+  "gate.door2.title": "One Point Lesson",
+  "gate.door2.desc": "A TPM-style one point lesson: create an OPL sheet, share knowledge, search the library, print it for the workplace, and sign as a learner",
+  "gate.stat.kaizenEmployee": "My Kaizen: {n}",
+  "gate.stat.kaizenPending": "{n} awaiting approval",
+  "gate.stat.kaizenReview": "{n} awaiting review",
+  "gate.stat.oplEmployee": "My OPL: {my} · In library: {pub}",
+  "gate.stat.oplReview": "{pending} awaiting review · In library: {pub}",
+  "gate.stat.oplOther": "In library: {pub}",
+  "nav.dashboard": "Dashboard",
+  "nav.employee": "Employee",
+  "nav.supervisor": "Supervisor",
+  "nav.admin": "Admin",
+  "nav.director": "Director",
+  "nav.award": "Kaizen Award",
+  "nav.users": "Manage Users",
+  "nav.judge": "Score Kaizen Award",
+  "nav.oplLibrary": "OPL Library",
+  "nav.oplMine": "My OPL",
+  "nav.oplManage": "Review / Manage OPL",
+  "role.employee": "Employee",
+  "role.supervisor": "Supervisor",
+  "role.admin": "Admin (HR)",
+  "role.director": "Factory Director",
+  "role.judge": "Kaizen Award Judge",
+  "header.kaizenSubtitle": "Kaizen & Suggestion management system",
+  "header.oplSubtitle": "A one point lesson (OPL), TPM style",
+  "header.home": "Home",
+  "header.homeTitle": "Back to door selection",
+  "header.notifTitle": "Notifications",
+  "status.draft": "Draft",
+  "status.pending_supervisor": "Awaiting supervisor approval",
+  "status.pending_admin": "Awaiting Admin review",
+  "status.pending_director": "Awaiting Director approval",
+  "status.approved": "Approved",
+  "status.rejected": "Returned",
+  "opl.status.draft": "Draft",
+  "opl.status.pending": "Awaiting supervisor review",
+  "opl.status.published": "Published",
+  "opl.status.returned": "Returned",
+  "opl.category.basic": "Basic Knowledge",
+  "opl.category.problem": "Problem Case",
+  "opl.category.improvement": "Improvement Example",
+  "opl.photo.basicA": "Illustration / Diagram 1",
+  "opl.photo.basicB": "Illustration / Diagram 2",
+  "opl.photo.ng": "Wrong Picture (NG)",
+  "opl.photo.ok": "Correct Picture (OK)",
+  "opl.photo.before": "Before",
+  "opl.photo.after": "After",
+  "opl.guide.header": "Learn about OPL before you start",
+  "common.view": "View",
+  "common.edit": "Edit",
+  "common.delete": "Delete",
+  "common.cancel": "Cancel",
+  "common.save": "Save",
+  "common.confirm": "Confirm",
+  "common.print": "Print",
+  "common.download": "Download",
+  "common.add": "Add",
+  "common.search": "Search",
+  "common.all": "All",
+  "common.clearFilters": "Clear filters",
+  "common.notFound": "No results found",
+  "common.present": "Present",
+  "common.notifications": "Notifications",
+  "common.markAllRead": "Mark all read",
+  "common.noNotifications": "No notifications yet",
+  "table.no": "No. / Date",
+  "table.title": "Title",
+  "table.dept": "Department",
+  "table.category": "Category",
+  "table.status": "Status",
+  "table.actions": "Actions",
+  "table.showing": "Showing {shown} of {total} items",
+  "table.sortedNewest": "Newest submissions shown first",
+  "table.searchFilter": "Search / filter",
+  "kform.title": "Topic / Project Name",
+  "kform.titlePlaceholder": "e.g. a digital scale cart for the packing table",
+  "kform.team": "Team Name",
+  "kform.teamPlaceholder": "e.g. Safety Packing 3 Team",
+  "kform.dept": "Department",
+  "kform.submittedBy": "Submitted by (full name)",
+  "kform.submittedByPlaceholder": "First name Last name",
+  "kform.activityType": "Activity Type",
+  "kform.problem": "1. Problem and Current Situation",
+  "kform.problemPlaceholder": "Describe the problem before the improvement",
+  "kform.improvement": "2. Improvement Idea",
+  "kform.improvementPlaceholder": "Describe how it was fixed or improved",
+  "kform.budget": "3. Budget Used for the Improvement",
+  "kform.budgetHint": "Numbers only (baht); enter 0 if none",
+  "kform.result": "4. Result",
+  "kform.resultPlaceholder": "Fill in later if there is no result yet",
+  "kform.costSaving": "5. Cost Saving Achieved",
+  "kform.costSavingHint": "Numbers only (baht per year); enter 0 if none",
+  "kform.costSavingCalc": "6. How the Result Was Calculated (if there is Cost Saving)",
+  "kform.costSavingCalcPlaceholder": "e.g. the method/formula used for the Cost Saving",
+"kform.costSavingCalcHint": "Leave this blank if there is no Cost Saving",
+  "kform.imageBefore": "Before Photo",
+  "kform.imageAfter": "After Photo",
+  "kform.busyNote": "Resizing photos, please wait. The save button will be enabled when done...",
+  "kform.saveDraft": "Save as draft",
+  "kform.submit": "Submit",
+  "kform.saveEdit": "Save changes",
+  "dash.title": "Factory-wide Kaizen Overview",
+  "dash.subtitle": "Track status, filter by category, department, and status in real time",
+  "dash.kpiTotal": "Total Kaizen",
+  "dash.kpiCostSaving": "Cost Saving Value",
+  "dash.kpiProject": "Kaizen Project",
+  "dash.kpiCross": "Cross Functional Kaizen",
+  "dash.exportExcel": "Export Excel",
+  "page.employee.title": "My Kaizen List",
+  "page.supervisor.title": "Approve Kaizen (Supervisor)",
+  "page.admin.title": "Review and Categorize (Admin)",
+  "page.director.title": "Awaiting Final Approval (Factory Director)",
+  "page.newKaizen": "Submit New Kaizen",
+  "opl.mine.title": "My OPL",
+  "opl.mine.subtitle": "Create an OPL sheet, send it for supervisor review, then publish it to the library",
+  "opl.mine.newBtn": "Create new OPL",
+  "opl.mine.empty": "No OPL yet. Click \"Create new OPL\" to get started.",
+  "opl.manage.titleAdmin": "Review / Manage OPL (Admin)",
+  "opl.manage.titleDept": "Review / Manage OPL (Your Department)",
+  "opl.manage.subtitle": "Review submitted OPLs, approve to publish or return them, and edit details",
+  "opl.manage.adminDeleteNote": "Only Admin can delete an OPL",
+  "opl.manage.pending": "Awaiting review",
+  "opl.manage.all": "All",
+  "opl.manage.allStatus": "All statuses",
+  "opl.manage.emptyPending": "No OPL awaiting review",
+  "opl.manage.review": "Review",
+  "opl.detail.downloadPng": "Download as image (PNG)",
+  "opl.detail.printPdf": "Print / Save as PDF",
+  "opl.detail.generating": "Generating image...",
+  "opl.detail.signTitle": "Sign as a learner",
+  "opl.detail.signDesc": "After reading and understanding this OPL, choose your section/unit, type the learner's full name, then save (one name per entry)",
+  "opl.detail.section": "Section",
+  "opl.detail.unit": "Unit",
+  "opl.detail.learnerName": "Learner's full name",
+  "opl.detail.signBtn": "Confirm learned",
+  "opl.detail.reviewTitle": "Review this OPL",
+  "opl.detail.commentPlaceholder": "Comment (required when returning)",
+  "opl.detail.returnBtn": "Return for edits",
+  "opl.detail.approveBtn": "Approve and publish",
+  "opl.detail.history": "History",
+  "opl.delete.title": "Delete OPL",
+  "opl.delete.note": "When connected to Google Sheet, data is moved to the \"OPLDeleted\" backup sheet (not permanently deleted). Photos on Google Drive remain.",
+  "opl.delete.reason": "Reason for deletion (optional)",
+  "opl.delete.reasonPlaceholder": "e.g. duplicate / test data",
+  "opl.delete.confirm": "Confirm you want to delete this OPL",
+  "opl.sheet.theme": "Theme",
+  "opl.sheet.why": "Why it matters",
+  "opl.sheet.keyPoints": "Key Points",
+  "opl.sheet.ok": "OK · Do",
+  "opl.sheet.ng": "NG · Don't",
+  "opl.sheet.note": "Caution:",
+  "opl.sheet.training": "Training Record",
+  "opl.sheet.learnerName": "Learner Name",
+  "opl.sheet.section": "Section",
+  "opl.sheet.unit": "Unit",
+  "opl.sheet.date": "Date",
+  "opl.sheet.no": "OPL No.",
+"opl.sheet.dept": "Unit",
+  "opl.sheet.preparedBy": "Prepared by",
+  "opl.sheet.preparerReviewer": "Prepared / Reviewed by",
+  "opl.sheet.reviewer": "Reviewer / Publisher",
+  "opl.sheet.footerNote": "OPL = learn one point in 5-10 minutes · sign every time you learn it",
+  "opl.form.newTitle": "Create a New One Point Lesson",
+"opl.form.editTitle": "Edit OPL: {no}",
+  "opl.form.categoryLabel": "OPL Category",
+  "opl.form.titleLabel": "OPL Title (Theme)",
+  "opl.form.titlePlaceholder": "e.g. How to correctly put on gloves before entering the production area (one topic per sheet)",
+  "opl.form.deptLabel": "Department",
+  "opl.form.preparedByLabel": "Prepared by (person or team name)",
+  "opl.form.preparedByPlaceholder": "e.g. Somchai / Packing 1 Team",
+  "opl.form.whyLabel": "Why it matters",
+  "opl.form.whyHint": "1-2 short sentences showing the reader why this matters to them",
+  "opl.form.keyPointsLabel": "Key Points",
+  "opl.form.keyPointsHint": "Suggested 3-5 points, one line each, short and clear",
+  "opl.form.keyPointPlaceholder": "e.g. Wash hands with soap for at least 20 seconds",
+  "opl.form.addLine": "Add item",
+  "opl.form.dosPlaceholder": "What is correct",
+  "opl.form.dontsPlaceholder": "What is wrong",
+  "opl.form.noteLabel": "Additional caution (if any)",
+  "opl.form.pillarsLabel": "Related categories (choose any that apply)",
+  "opl.form.submitEmployee": "Send for supervisor review",
+  "opl.form.submitReviewer": "Publish OPL",
+  "opl.form.missingPrefix": "Please fill in:",
+  "opl.form.pleaseFixResend": "Please fix it and resend",
+"opl.form.returnedBy": "Returned by",
+"opl.detail.learnedCount": "{n} people have learned this",
+"opl.detail.pngMissing": "Downloaded, but {missing} of {total} photos did not appear in the image. Try updating Code.gs to the latest version, or use the Print / Save as PDF button",
+"opl.detail.pngError": "Could not download as an image. Try using the Print / Save as PDF button instead",
+"opl.detail.ackSuccess": "Learner recorded",
+"opl.detail.reviewReturnError": "Please add a comment when returning, so the author knows what to fix",
+"opl.library.title": "One Point Lesson Library",
+"opl.library.subtitle": "One point lessons you can learn in 5 minutes. Search, read, and sign as a learner here.",
+"opl.library.searchPlaceholder": "Search topic / department / key point",
+"opl.library.allDept": "All units",
+"opl.library.emptyNone": "No OPL has been published to the library yet",
+"opl.library.emptyFiltered": "No OPL matches the filters",
+"opl.table.submittedBy": "Submitted by {name}",
+"dash.kpiTotalSub": "Supervisor-approved only",
+"dash.kpiProjectSub": "Individual improvement projects",
+"dash.kpiCrossSub": "Cross-functional projects",
+"dash.kpiCostSavingSub": "baht/year from counted Kaizen",
+},
+  mm: {
+  "login.subtitle": "သင့်ခွင့်ပြုချက်အတိုင်း စနစ်ထဲသို့ ဝင်ရောက်ပါ",
+  "login.usernameLabel": "အသုံးပြုသူအမည် (ရှာဖွေပြီး စာရင်းမှ ရွေးချယ်ပါ)",
+  "login.usernamePlaceholder": "ဌာနအမည် (သို့) အမည်အပြည့်အစုံ ရိုက်ထည့်ပါ",
+  "login.passwordLabel": "စကားဝှက်",
+  "login.passwordPlaceholder": "သင့်စကားဝှက်",
+  "login.loginBtn": "ဝင်ရောက်ရန်",
+  "login.loadingUsers": "အသုံးပြုသူစာရင်း ဖွင့်နေသည်...",
+  "login.checking": "စစ်ဆေးနေသည်...",
+  "login.forgot": "စကားဝှက်မေ့သွားပါက (သို့) အကောင့်အသစ်လိုအပ်ပါက HR ဌာနသို့ ဆက်သွယ်ပါ",
+  "login.noUserFound": "သက်ဆိုင်သော အသုံးပြုသူ မတွေ့ပါ",
+  "login.wrongCredentials": "အသုံးပြုသူအမည် (သို့) စကားဝှက် မှားနေသည်",
+  "login.lockedMsg": "စကားဝှက်ကို အကြိမ်များစွာ မှားရိုက်မိသည်။ {sec} စက္ကန့် စောင့်ပြီး ထပ်စမ်းပါ",
+  "login.disabledAccount": "ဤအကောင့်ကို ပိတ်ထားသည်။ Admin ကို ဆက်သွယ်ပါ",
+  "login.browserError": "ဤဘရောက်ဇာဖြင့် စကားဝှက်ကို စစ်ဆေး၍မရပါ။ https လင့်ခ်ဖြင့် ဝဘ်ဆိုက်ကို ဖွင့်ပါ",
+  "login.multipleAccounts": "ဤအမည်ကို အကောင့် {n} ခု အသုံးပြုထားသည် (စကားဝှက်ဖြင့် ခွဲခြားပါ)",
+  "login.moreDepartments": "{list} နှင့် နောက်ထပ် ဌာန {n} ခု",
+  "gate.hello": "မင်္ဂလာပါ",
+  "gate.choosePrompt": "ဝင်ရောက်လိုသော တံခါးကို ရွေးချယ်ပါ",
+  "gate.enterDoor": "တံခါး {n} ကို ဝင်ရန်",
+  "gate.logoutTitle": "ထွက်ရန်",
+  "gate.manageUsers": "အသုံးပြုသူများ စီမံရန်",
+  "gate.door1.sub": "KAIZEN & SUGGESTION",
+  "gate.door1.title": "Kaizen",
+  "gate.door1.desc": "တိုးတက်မှုအကြံပြုချက်များ တင်ပြပါ၊ မလုပ်မီ-လုပ်ပြီးပုံများ ပူးတွဲပါ၊ အတည်ပြုအခြေအနေကို ခြေရာခံပါ၊ ဒက်ရှ်ဘုတ်ကို ကြည့်ပြီး Kaizen Award ပြိုင်ပွဲတွင် ပါဝင်ပါ",
+  "gate.door2.sub": "ONE POINT LESSON",
+  "gate.door2.title": "One Point Lesson",
+  "gate.door2.desc": "TPM စနစ်အတိုင်း အချက်တစ်ချက်သင်ခန်းစာ။ OPL စာရွက်ပြုလုပ်ပါ၊ အသိပညာမျှဝေပါ၊ စာကြည့်တိုက်တွင် ရှာဖွေပါ၊ အလုပ်ခွင်တွင် ပုံနှိပ်ကပ်ပြီး လေ့လာသူအဖြစ် လက်မှတ်ရေးထိုးပါ",
+  "gate.stat.kaizenEmployee": "ကျွန်ုပ်၏ Kaizen {n} ခု",
+  "gate.stat.kaizenPending": "အတည်ပြုရန် {n} ခု ကျန်ရှိသည်",
+  "gate.stat.kaizenReview": "စစ်ဆေးရန် {n} ခု ကျန်ရှိသည်",
+  "gate.stat.oplEmployee": "ကျွန်ုပ်၏ OPL {my} · စာကြည့်တိုက်တွင် {pub}",
+  "gate.stat.oplReview": "စစ်ဆေးရန် {pending} · စာကြည့်တိုက်တွင် {pub}",
+  "gate.stat.oplOther": "စာကြည့်တိုက်တွင် {pub} ခု",
+  "nav.dashboard": "ဒက်ရှ်ဘုတ်",
+  "nav.employee": "ဝန်ထမ်း",
+  "nav.supervisor": "ကြီးကြပ်ရေးမှူး",
+  "nav.admin": "Admin",
+  "nav.director": "ဒါရိုက်တာ",
+  "nav.award": "Kaizen Award",
+  "nav.users": "အသုံးပြုသူများ စီမံရန်",
+  "nav.judge": "Kaizen Award ရမှတ်ပေးရန်",
+  "nav.oplLibrary": "OPL စာကြည့်တိုက်",
+  "nav.oplMine": "ကျွန်ုပ်၏ OPL",
+  "nav.oplManage": "OPL စစ်ဆေးရန် / စီမံရန်",
+  "role.employee": "ဝန်ထမ်း",
+  "role.supervisor": "ကြီးကြပ်ရေးမှူး",
+  "role.admin": "Admin (HR ဌာန)",
+  "role.director": "စက်ရုံဒါရိုက်တာ",
+  "role.judge": "Kaizen Award တရားသူကြီး",
+  "header.kaizenSubtitle": "Kaizen & Suggestion စီမံခန့်ခွဲမှုစနစ်",
+  "header.oplSubtitle": "TPM စနစ်အတိုင်း အချက်တစ်ချက်သင်ခန်းစာ (OPL)",
+  "header.home": "ပင်မစာမျက်နှာ",
+  "header.homeTitle": "တံခါးရွေးချယ်ရာသို့ ပြန်သွားရန်",
+  "header.notifTitle": "အသိပေးချက်များ",
+  "status.draft": "မူကြမ်း",
+  "status.pending_supervisor": "ကြီးကြပ်ရေးမှူး အတည်ပြုရန် စောင့်နေသည်",
+  "status.pending_admin": "Admin စစ်ဆေးရန် စောင့်နေသည်",
+  "status.pending_director": "ဒါရိုက်တာ အတည်ပြုရန် စောင့်နေသည်",
+  "status.approved": "အတည်ပြုပြီး",
+  "status.rejected": "ပြန်လည်ထုတ်ပေးခံရသည်",
+  "opl.status.draft": "မူကြမ်း",
+  "opl.status.pending": "ကြီးကြပ်ရေးမှူး စစ်ဆေးရန် စောင့်နေသည်",
+  "opl.status.published": "ထုတ်ပြန်ပြီး",
+  "opl.status.returned": "ပြန်လည်ထုတ်ပေးခံရသည်",
+  "opl.category.basic": "အခြေခံဗဟုသုတ",
+  "opl.category.problem": "ပြဿနာဖြစ်ရပ်",
+  "opl.category.improvement": "တိုးတက်မှုဥပမာ",
+  "opl.photo.basicA": "ပုံ / ပုံကြမ်း ၁",
+  "opl.photo.basicB": "ပုံ / ပုံကြမ်း ၂",
+  "opl.photo.ng": "မှားသောပုံ (NG)",
+  "opl.photo.ok": "မှန်ကန်သောပုံ (OK)",
+  "opl.photo.before": "မပြင်မီ",
+  "opl.photo.after": "ပြင်ပြီးနောက်",
+  "opl.guide.header": "OPL အကြောင်း စတင်မီ လေ့လာပါ",
+  "common.view": "ကြည့်ရန်",
+  "common.edit": "ပြင်ဆင်ရန်",
+  "common.delete": "ဖျက်ရန်",
+  "common.cancel": "ပယ်ဖျက်ရန်",
+  "common.save": "သိမ်းဆည်းရန်",
+  "common.confirm": "အတည်ပြုရန်",
+  "common.print": "ပုံနှိပ်ရန်",
+  "common.download": "ဒေါင်းလုဒ်ဆွဲရန်",
+  "common.add": "ထည့်ရန်",
+  "common.search": "ရှာဖွေရန်",
+  "common.all": "အားလုံး",
+  "common.clearFilters": "စစ်ထုတ်မှု ရှင်းရန်",
+  "common.notFound": "ရလဒ်မတွေ့ပါ",
+  "common.present": "တင်ပြရန်",
+  "common.notifications": "အသိပေးချက်များ",
+  "common.markAllRead": "အားလုံး ဖတ်ပြီးအဖြစ် သတ်မှတ်ရန်",
+  "common.noNotifications": "အသိပေးချက် မရှိသေးပါ",
+  "table.no": "အမှတ် / ရက်စွဲ",
+  "table.title": "ခေါင်းစဉ်",
+  "table.dept": "ဌာန",
+  "table.category": "အမျိုးအစား",
+  "table.status": "အခြေအနေ",
+  "table.actions": "လုပ်ဆောင်ချက်",
+  "table.showing": "{total} ခုထဲမှ {shown} ခု ပြသနေသည်",
+  "table.sortedNewest": "အသစ်ဆုံးတင်သွင်းမှုများကို အပေါ်တွင် ပြသထားသည်",
+  "table.searchFilter": "ရှာဖွေ / စစ်ထုတ်ရန်",
+  "kform.title": "ခေါင်းစဉ် / စီမံကိန်းအမည်",
+  "kform.titlePlaceholder": "ဥပမာ - ထုပ်ပိုးရေးစားပွဲအတွက် ဒီဂျစ်တယ်စကေး လက်တွန်းလှည်း",
+  "kform.team": "အဖွဲ့အမည်",
+  "kform.teamPlaceholder": "ဥပမာ - Safety Packing 3 အဖွဲ့",
+  "kform.dept": "ဌာန",
+  "kform.submittedBy": "တင်သွင်းသူ (အမည်အပြည့်အစုံ)",
+  "kform.submittedByPlaceholder": "အမည် မျိုးနွယ်အမည်",
+  "kform.activityType": "လှုပ်ရှားမှုအမျိုးအစား",
+  "kform.problem": "၁။ ပြဿနာနှင့် လက်ရှိအခြေအနေ",
+  "kform.problemPlaceholder": "ပြင်ဆင်မှုမပြုမီ တွေ့ရှိရသော ပြဿနာကို ရှင်းပြပါ",
+  "kform.improvement": "၂။ တိုးတက်မှုအကြံဥာဏ်",
+  "kform.improvementPlaceholder": "မည်သို့ ပြင်ဆင် (သို့) တိုးတက်အောင်ပြုလုပ်ခဲ့သည်ကို ရှင်းပြပါ",
+  "kform.budget": "၃။ ပြင်ဆင်မှုအတွက် အသုံးပြုခဲ့သော ဘတ်ဂျက်",
+  "kform.budgetHint": "ဂဏန်းသာ ထည့်ပါ (ဘတ်); မရှိပါက 0 ထည့်ပါ",
+  "kform.result": "၄။ ရလဒ်",
+  "kform.resultPlaceholder": "ရလဒ်မရှိသေးပါက နောက်မှ ဖြည့်ပါ",
+  "kform.costSaving": "၅။ ရရှိခဲ့သော Cost Saving",
+  "kform.costSavingHint": "ဂဏန်းသာ ထည့်ပါ (တစ်နှစ်လျှင် ဘတ်); မရှိပါက 0 ထည့်ပါ",
+  "kform.costSavingCalc": "၆။ ရလဒ်ကို မည်သို့ တွက်ချက်ခဲ့သလဲ (Cost Saving ရှိပါက)",
+  "kform.costSavingCalcPlaceholder": "ဥပမာ - Cost Saving တွက်ချက်ပုံ/နည်းလမ်း",
+"kform.costSavingCalcHint": "Cost Saving မရှိပါက ဤအကွက်ကို မဖြည့်ရပါ",
+  "kform.imageBefore": "မပြင်မီ ဓာတ်ပုံ",
+  "kform.imageAfter": "ပြင်ပြီးနောက် ဓာတ်ပုံ",
+  "kform.busyNote": "ပုံများ ချုံ့နေသည်၊ ခဏစောင့်ပါ။ ပြီးလျှင် သိမ်းရန်ခလုတ်ကို နှိပ်နိုင်ပါပြီ...",
+  "kform.saveDraft": "မူကြမ်းအဖြစ် သိမ်းရန်",
+  "kform.submit": "ပို့ရန်",
+  "kform.saveEdit": "ပြင်ဆင်ချက် သိမ်းရန်",
+  "dash.title": "စက်ရုံတစ်ခုလုံး၏ Kaizen အနှစ်ချုပ်",
+  "dash.subtitle": "အခြေအနေကို ခြေရာခံပြီး အမျိုးအစား၊ ဌာန၊ အခြေအနေအလိုက် ချက်ချင်း စစ်ထုတ်ကြည့်ပါ",
+  "dash.kpiTotal": "Kaizen စုစုပေါင်း",
+  "dash.kpiCostSaving": "Cost Saving တန်ဖိုး",
+  "dash.kpiProject": "Kaizen Project",
+  "dash.kpiCross": "Cross Functional Kaizen",
+  "dash.exportExcel": "Excel ထုတ်ရန်",
+  "page.employee.title": "ကျွန်ုပ်၏ Kaizen စာရင်း",
+  "page.supervisor.title": "Kaizen အတည်ပြုရန် (ကြီးကြပ်ရေးမှူး)",
+  "page.admin.title": "စစ်ဆေးပြီး အမျိုးအစားခွဲရန် (Admin)",
+  "page.director.title": "နောက်ဆုံးအတည်ပြုချက် (ဒါရိုက်တာ)",
+  "page.newKaizen": "Kaizen အသစ် တင်သွင်းရန်",
+  "opl.mine.title": "ကျွန်ုပ်၏ OPL",
+  "opl.mine.subtitle": "OPL စာရွက်ပြုလုပ်ပြီး ကြီးကြပ်ရေးမှူးထံ စစ်ဆေးရန်ပို့ပါ၊ ထို့နောက် စာကြည့်တိုက်သို့ ထုတ်ပြန်ပါ",
+  "opl.mine.newBtn": "OPL အသစ်ပြုလုပ်ရန်",
+  "opl.mine.empty": "OPL မရှိသေးပါ။ စတင်ရန် \"OPL အသစ်ပြုလုပ်ရန်\" ကို နှိပ်ပါ",
+  "opl.manage.titleAdmin": "OPL စစ်ဆေး/စီမံရန် (Admin)",
+  "opl.manage.titleDept": "OPL စစ်ဆေး/စီမံရန် (တာဝန်ယူထားသောဌာန)",
+  "opl.manage.subtitle": "တင်သွင်းထားသော OPL များကို စစ်ဆေးပြီး ထုတ်ပြန်ရန် အတည်ပြု (သို့) ပြန်ပို့ကာ အချက်အလက်များကို ပြင်ဆင်ပါ",
+  "opl.manage.adminDeleteNote": "OPL ကို Admin သာ ဖျက်နိုင်သည်",
+  "opl.manage.pending": "စစ်ဆေးရန် ကျန်ရှိ",
+  "opl.manage.all": "အားလုံး",
+  "opl.manage.allStatus": "အခြေအနေအားလုံး",
+  "opl.manage.emptyPending": "စစ်ဆေးရန် OPL မရှိပါ",
+  "opl.manage.review": "စစ်ဆေးရန်",
+  "opl.detail.downloadPng": "ပုံအဖြစ် ဒေါင်းလုဒ်ဆွဲရန် (PNG)",
+  "opl.detail.printPdf": "ပုံနှိပ် / PDF အဖြစ်သိမ်းရန်",
+  "opl.detail.generating": "ပုံဖန်တီးနေသည်...",
+  "opl.detail.signTitle": "လေ့လာသူအဖြစ် လက်မှတ်ရေးထိုးရန်",
+  "opl.detail.signDesc": "ဤ OPL ကို ဖတ်ပြီး နားလည်ပြီးနောက် ဌာန/ယူနစ်ကို ရွေးပြီး လေ့လာသူ၏ အမည်အပြည့်အစုံ ရိုက်ထည့်ကာ သိမ်းဆည်းပါ (တစ်ကြိမ်လျှင် တစ်ဦးစာ)",
+  "opl.detail.section": "ဌာန (Section)",
+  "opl.detail.unit": "ယူနစ် (Unit)",
+  "opl.detail.learnerName": "လေ့လာသူ၏ အမည်အပြည့်အစုံ",
+  "opl.detail.signBtn": "လေ့လာပြီးကြောင်း သိမ်းဆည်းရန်",
+  "opl.detail.reviewTitle": "ဤ OPL ကို စစ်ဆေးရန်",
+  "opl.detail.commentPlaceholder": "မှတ်ချက် (ပြန်ပို့ပါက လိုအပ်သည်)",
+  "opl.detail.returnBtn": "ပြင်ဆင်ရန် ပြန်ပို့မည်",
+  "opl.detail.approveBtn": "အတည်ပြုပြီး ထုတ်ပြန်ရန်",
+  "opl.detail.history": "မှတ်တမ်း",
+  "opl.delete.title": "OPL ကို ဖျက်ရန်",
+  "opl.delete.note": "Google Sheet ချိတ်ဆက်ထားပါက အချက်အလက်ကို \"OPLDeleted\" မိတ္တူသိမ်းဆည်းရာသို့ ရွှေ့ထားမည် (အပြီးအပိုင် ဖျက်မည်မဟုတ်ပါ)။ Google Drive ပေါ်ရှိ ဓာတ်ပုံများ ကျန်ရှိနေမည်",
+  "opl.delete.reason": "ဖျက်ရသည့် အကြောင်းရင်း (မဖြစ်မနေ မလိုအပ်ပါ)",
+  "opl.delete.reasonPlaceholder": "ဥပမာ - ထပ်နေသည် / စမ်းသပ်ဒေတာ",
+  "opl.delete.confirm": "ဤ OPL ကို ဖျက်လိုကြောင်း အတည်ပြုပါ",
+  "opl.sheet.theme": "ခေါင်းစဉ် (Theme)",
+  "opl.sheet.why": "ဘာကြောင့် သိထားသင့်သလဲ",
+  "opl.sheet.keyPoints": "အဓိကအချက် (Key Points)",
+  "opl.sheet.ok": "OK · လုပ်သင့်",
+  "opl.sheet.ng": "NG · မလုပ်သင့်",
+  "opl.sheet.note": "သတိပြုရန်:",
+  "opl.sheet.training": "လေ့လာမှု မှတ်တမ်း (Training Record)",
+  "opl.sheet.learnerName": "လေ့လာသူအမည်",
+  "opl.sheet.section": "ဌာန",
+  "opl.sheet.unit": "ယူနစ်",
+  "opl.sheet.date": "ရက်စွဲ",
+  "opl.sheet.no": "OPL အမှတ်",
+"opl.sheet.dept": "ယူနစ်",
+  "opl.sheet.preparedBy": "ပြုစုသူ",
+  "opl.sheet.preparerReviewer": "ပြုစုသူ / စစ်ဆေးသူ",
+  "opl.sheet.reviewer": "စစ်ဆေးသူ / ထုတ်ပြန်သူ",
+  "opl.sheet.footerNote": "OPL = အချက်တစ်ချက်ကို ၅-၁၀ မိနစ်အတွင်း လေ့လာနိုင်သည် · လေ့လာတိုင်း လက်မှတ်ရေးထိုးပါ",
+  "opl.form.newTitle": "One Point Lesson အသစ် ပြုလုပ်ရန်",
+"opl.form.editTitle": "OPL ပြင်ဆင်ရန်: {no}",
+  "opl.form.categoryLabel": "OPL အမျိုးအစား",
+  "opl.form.titleLabel": "OPL ခေါင်းစဉ် (Theme)",
+  "opl.form.titlePlaceholder": "ဥပမာ - ထုတ်လုပ်မှုနေရာမဝင်မီ လက်အိတ်မှန်ကန်စွာ စွပ်နည်း (တစ်စာရွက်လျှင် တစ်ခေါင်းစဉ်)",
+  "opl.form.deptLabel": "ဌာန",
+  "opl.form.preparedByLabel": "ပြုစုသူ (ပုဂ္ဂိုလ် (သို့) အဖွဲ့အမည်)",
+  "opl.form.preparedByPlaceholder": "ဥပမာ - Somchai / Packing 1 အဖွဲ့",
+  "opl.form.whyLabel": "ဘာကြောင့် သိထားသင့်သလဲ",
+  "opl.form.whyHint": "ဖတ်သူနှင့် မည်သို့သက်ဆိုင်သည်ကို ပြသရန် စာကြောင်း ၁-၂ ကြောင်းတိုတို",
+  "opl.form.keyPointsLabel": "အဓိကအချက် (Key Points)",
+  "opl.form.keyPointsHint": "အချက် ၃-၅ ချက် အကြံပြုသည်၊ တစ်ကြောင်းလျှင် တစ်ချက်၊ တိုတိုရှင်းရှင်း",
+  "opl.form.keyPointPlaceholder": "ဥပမာ - ဆပ်ပြာဖြင့် အနည်းဆုံး ၂၀ စက္ကန့် လက်ဆေးပါ",
+  "opl.form.addLine": "အချက်ထည့်ရန်",
+  "opl.form.dosPlaceholder": "မှန်ကန်သောအရာ",
+  "opl.form.dontsPlaceholder": "မှားယွင်းသောအရာ",
+  "opl.form.noteLabel": "နောက်ထပ် သတိပေးချက် (ရှိပါက)",
+  "opl.form.pillarsLabel": "ဆက်စပ်အမျိုးအစား (တစ်ခုထက်ပိုရွေးနိုင်သည်)",
+  "opl.form.submitEmployee": "ကြီးကြပ်ရေးမှူးထံ စစ်ဆေးရန်ပို့ရန်",
+  "opl.form.submitReviewer": "OPL ထုတ်ပြန်ရန်",
+  "opl.form.missingPrefix": "ဖြည့်ပေးပါ:",
+  "opl.form.pleaseFixResend": "ပြင်ဆင်ပြီး ပြန်ပို့ပါ",
+"opl.form.returnedBy": "ပြန်ပို့ခဲ့သူ",
+"opl.detail.learnedCount": "လူ {n} ယောက် လေ့လာပြီးပါပြီ",
+"opl.detail.pngMissing": "ဒေါင်းလုဒ်ချပြီးပါပြီ၊ သို့သော် ပုံ {total} ထဲမှ {missing} ပုံ ပုံဖိုင်တွင် မပေါ်ပါ။ Code.gs ကို နောက်ဆုံးဗားရှင်းအဖြစ် အပ်ဒိတ်လုပ်ကြည့်ပါ (သို့) ပုံနှိပ် / PDF အဖြစ်သိမ်းရန် ခလုတ်ကို သုံးပါ",
+"opl.detail.pngError": "ပုံအဖြစ် ဒေါင်းလုဒ်ဆွဲ၍မရပါ။ ပုံနှိပ် / PDF အဖြစ်သိမ်းရန် ခလုတ်ကို အစား သုံးကြည့်ပါ",
+"opl.detail.ackSuccess": "လေ့လာသူအမည် သိမ်းဆည်းပြီးပါပြီ",
+"opl.detail.reviewReturnError": "ပြန်ပို့သည့်အခါ မှတ်ချက်ထည့်ပေးပါ၊ ပြုစုသူ မည်သည်ကို ပြင်ရမည်ကို သိနိုင်ရန်",
+"opl.library.title": "One Point Lesson စာကြည့်တိုက်",
+"opl.library.subtitle": "၅ မိနစ်အတွင်း လေ့လာနိုင်သော အချက်တစ်ချက်သင်ခန်းစာများ။ ဤနေရာတွင် ရှာဖွေ၊ ဖတ်ရှုပြီး လေ့လာသူအဖြစ် လက်မှတ်ရေးထိုးနိုင်သည်",
+"opl.library.searchPlaceholder": "ခေါင်းစဉ် / ဌာန / အချက် ရှာပါ",
+"opl.library.allDept": "ဌာနအားလုံး",
+"opl.library.emptyNone": "စာကြည့်တိုက်တွင် ထုတ်ပြန်ထားသော OPL မရှိသေးပါ",
+"opl.library.emptyFiltered": "စစ်ထုတ်မှုနှင့် ကိုက်ညီသော OPL မတွေ့ပါ",
+"opl.table.submittedBy": "{name} မှ တင်သွင်းသည်",
+"dash.kpiTotalSub": "ကြီးကြပ်ရေးမှူး အတည်ပြုပြီးသားအရေအတွက်သာ",
+"dash.kpiProjectSub": "တစ်ဦးတည်းတိုးတက်မှု စီမံကိန်း",
+"dash.kpiCrossSub": "အဖွဲ့ကူးစီမံကိန်း",
+"dash.kpiCostSavingSub": "တစ်နှစ်လျှင် ဘတ် ၊ ရေတွက်ထားသော Kaizen များမှ",
+},
+};
+const LangCtx = createContext({ lang: "th", setLang: () => {}, t: (k) => k });
+function useI18n() {
+  return useContext(LangCtx);
+}
+function fmtI18n(str, vars) {
+  if (!vars) return str;
+  return str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? String(vars[k]) : `{${k}}`));
+}
+function makeTranslator(lang) {
+  return (key, vars) => fmtI18n((I18N[lang] && I18N[lang][key]) ?? I18N.th[key] ?? key, vars);
+}
+function LanguageSwitcher({ lang, setLang, variant = "dark" }) {
+  const dark = variant === "dark";
+  return (
+    <div className="flex items-center gap-1">
+      {LANGS.map((l) => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => setLang(l)}
+          className="text-[11px] px-2 py-1 rounded-full border font-medium"
+          style={
+            lang === l
+              ? { background: dark ? GOLD : NAVY, borderColor: dark ? GOLD : NAVY, color: dark ? NAVY_DEEP : "white" }
+              : dark
+              ? { borderColor: "#3A5078", color: "#C7D2E0" }
+              : { borderColor: "#D8DDE5", color: SUB }
+          }
+        >
+          {LANG_LABELS[l]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const NAVY = "#12294B";
 const NAVY_DEEP = "#0B1D33";
@@ -63,33 +798,42 @@ async function postToSheet(action, record) {
   }
 }
 
-// สถานะการบันทึก Kaizen ลง Google Sheet (แสดงมุมขวาล่าง เมื่อเชื่อมต่อ Google Sheet อยู่)
-const syncState = { pending: 0, failed: new Map(), tracking: false };
+// สถานะการบันทึกลง Google Sheet (แสดงมุมขวาล่าง เมื่อเชื่อมต่อ Google Sheet อยู่) ใช้ร่วมกันทั้ง Kaizen และ One Point Lesson
+const syncState = { pending: 0, failed: new Map(), tracking: false, oplTracking: false };
 const syncSubscribers = new Set();
 function emitSync() {
   const snap = { pending: syncState.pending, failed: Array.from(syncState.failed.values()) };
   syncSubscribers.forEach((fn) => fn(snap));
 }
-async function syncKaizenToSheet(action, record) {
+async function syncRecordToSheet(action, record, kind) {
   const payload = toSheetRecord(record);
-  if (!syncState.tracking) {
-    // โหมดทดลอง/ยังไม่เชื่อมชีต: ส่งแบบเงียบๆ เหมือนเดิม (คาดว่าจะ error ถ้าทดสอบใน claude.ai artifact)
-    const r = await postToSheet(action, payload);
-    if (!r.ok) console.warn("Sync to Google Sheet failed:", r.error);
-    return r.ok;
+  const tracking = kind === "opl" ? syncState.oplTracking : syncState.tracking;
+  if (!tracking) {
+    if (kind === "opl") return false; // OPL ยังไม่ได้เชื่อมชีต (โหมดสาธิต / Code.gs เก่า): เก็บเฉพาะในหน้านี้
+    // Kaizen โหมดทดลอง/ยังไม่เชื่อมชีต: ส่งแบบเงียบๆ เหมือนเดิม (คาดว่าจะ error ถ้าทดสอบใน claude.ai artifact)
+    const r0 = await postToSheet(action, payload);
+    if (!r0.ok) console.warn("Sync to Google Sheet failed:", r0.error);
+    return r0.ok;
   }
+  const key = `${kind}:${record.id}`;
   syncState.pending += 1;
   emitSync();
   const r = await postToSheet(action, payload);
   syncState.pending -= 1;
-  if (r.ok) syncState.failed.delete(record.id);
-  else syncState.failed.set(record.id, { id: record.id, title: record.title || record.registeredNo || record.id, record, error: r.error });
+  if (r.ok) syncState.failed.delete(key);
+  else syncState.failed.set(key, { key, kind, id: record.id, title: record.title || record.registeredNo || record.oplNo || record.id, record, error: r.error });
   emitSync();
   return r.ok;
 }
-// ลองบันทึกซ้ำ: ใช้ "update" เสมอ (ถ้ายังไม่มีแถวนี้ในชีต ระบบจะเพิ่มให้ ไม่ซ้ำ)
+function syncKaizenToSheet(action, record) {
+  return syncRecordToSheet(action, record, "kaizen");
+}
+function syncOplToSheet(action, record) {
+  return syncRecordToSheet(action, record, "opl");
+}
+// ลองบันทึกซ้ำ: ใช้การบันทึกแบบ "แก้/เพิ่ม" เสมอ (ถ้ายังไม่มีแถวนี้ในชีต ระบบจะเพิ่มให้ ไม่ซ้ำ)
 function retryFailedSyncs() {
-  Array.from(syncState.failed.values()).forEach((f) => syncKaizenToSheet("update", f.record));
+  Array.from(syncState.failed.values()).forEach((f) => (f.kind === "opl" ? syncOplToSheet("oplSave", f.record) : syncKaizenToSheet("update", f.record)));
 }
 
 // ---------- Kaizen Award: บันทึก/โหลดเกณฑ์และคะแนน ----------
@@ -931,28 +1675,30 @@ function useKaizenFilters(rows) {
 }
 
 function RowFilterBar({ flt, total, dark }) {
+  const { t } = useI18n();
   const items = [
-    ["no", "เลขที่ / วันที่", "left"], ["title", "เรื่อง", "left"], ["dept", "หน่วยงาน", "left"], ["cat", "หมวดหมู่", "right"], ["status", "สถานะ", "right"],
+    ["no", t("table.no"), "left"], ["title", t("table.title"), "left"], ["dept", t("table.dept"), "left"], ["cat", t("table.category"), "right"], ["status", t("table.status"), "right"],
   ];
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-1.5 text-xs font-medium pr-1" style={{ color: dark ? "rgba(255,255,255,0.9)" : SUB }}>
-        <Search size={13} /> ค้นหา / กรอง
+        <Search size={13} /> {t("table.searchFilter")}
       </div>
       {items.map(([key, label, align]) => (
         <MultiSelectFilter key={key} label={label} options={flt.options[key]} dark={dark} align={align} {...flt.part(key)} />
       ))}
       {flt.active && (
-        <button type="button" onClick={flt.clear} className="text-xs underline px-1" style={{ color: dark ? "white" : DB_BLUE }}>ล้างตัวกรอง</button>
+        <button type="button" onClick={flt.clear} className="text-xs underline px-1" style={{ color: dark ? "white" : DB_BLUE }}>{t("common.clearFilters")}</button>
       )}
       <span className="ml-auto text-[11px]" style={{ color: dark ? "rgba(255,255,255,0.7)" : SUB }}>
-        แสดง {flt.filtered.length} จาก {total} รายการ · เรียงเรื่องที่ส่งล่าสุดไว้บน
+        {t("table.showing", { shown: flt.filtered.length, total })} · {t("table.sortedNewest")}
       </span>
     </div>
   );
 }
 
 function StatusBadge({ status }) {
+  const { t } = useI18n();
   const m = STATUS_META[status];
   return (
     <span
@@ -960,7 +1706,7 @@ function StatusBadge({ status }) {
       style={{ color: m.color, background: m.bg }}
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.color }} />
-      {m.label}
+      {t("status." + status)}
     </span>
   );
 }
@@ -1363,6 +2109,7 @@ function missingInfo(k) {
 }
 
 function KaizenForm({ initial, onCancel, onSave, currentUser, departments, adminMode, editorLabel = "Admin" }) {
+  const { t } = useI18n();
   // เลือกได้เฉพาะหน่วยงานย่อยของผู้ใช้งานที่ล็อกอิน ถ้าไม่มีสิทธิ์เฉพาะ (เช่น Admin) ให้เลือกได้จากทุกหน่วยงาน
   const deptList = currentUser?.departments?.length
     ? currentUser.departments
@@ -1411,24 +2158,24 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
         </div>
       )}
       <div className="grid grid-cols-2 gap-4">
-        <Field label="หัวเรื่อง / ชื่อโครงการ" required>
-          <TextInput value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="เช่น รถเข็นเครื่องชั่งดิจิตอลแบบตั้งโต๊ะ" />
+        <Field label={t("kform.title")} required>
+          <TextInput value={f.title} onChange={(e) => set("title", e.target.value)} placeholder={t("kform.titlePlaceholder")} />
         </Field>
-        <Field label="ชื่อทีม">
-          <TextInput value={f.team} onChange={(e) => set("team", e.target.value)} placeholder="เช่น ทีม Safety บรรจุ 3" />
+        <Field label={t("kform.team")}>
+          <TextInput value={f.team} onChange={(e) => set("team", e.target.value)} placeholder={t("kform.teamPlaceholder")} />
         </Field>
-        <Field label="หน่วยงาน" required>
+        <Field label={t("kform.dept")} required>
           <select className={inputCls} style={inputStyle} value={f.department} onChange={(e) => set("department", e.target.value)}>
             {deptList.map((d) => <option key={d}>{d}</option>)}
           </select>
         </Field>
-        <Field label="ผู้ส่งเรื่อง (ชื่อ-นามสกุล)" required>
-          <TextInput disabled={!!currentUser} style={{ opacity: currentUser ? 0.7 : 1 }} value={f.submittedBy} onChange={(e) => set("submittedBy", e.target.value)} placeholder="ชื่อ นามสกุล" />
+        <Field label={t("kform.submittedBy")} required>
+          <TextInput disabled={!!currentUser} style={{ opacity: currentUser ? 0.7 : 1 }} value={f.submittedBy} onChange={(e) => set("submittedBy", e.target.value)} placeholder={t("kform.submittedByPlaceholder")} />
         </Field>
       </div>
       {!adminMode && (
         <div>
-          <Field label="ประเภทกิจกรรม" required>
+          <Field label={t("kform.activityType")} required>
             <select className={inputCls} style={inputStyle} value={f.activityType || "Kaizen"} onChange={(e) => set("activityType", e.target.value)}>
               {ACTIVITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
             </select>
@@ -1437,31 +2184,31 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
         </div>
       )}
       <MemberTable members={f.members} onChange={(m) => set("members", m)} />
-      <Field label="1. ที่มาของปัญหาและสถานการณ์ปัจจุบัน" required>
-        <TextArea value={f.problem} onChange={(e) => set("problem", e.target.value)} placeholder="อธิบายปัญหาที่พบก่อนการปรับปรุง" />
+      <Field label={t("kform.problem")} required>
+        <TextArea value={f.problem} onChange={(e) => set("problem", e.target.value)} placeholder={t("kform.problemPlaceholder")} />
       </Field>
-      <Field label="2. แนวทางการปรับปรุง Improvement Idea" required>
-        <TextArea value={f.improvement} onChange={(e) => set("improvement", e.target.value)} placeholder="อธิบายวิธีการแก้ไข/ปรับปรุง" />
+      <Field label={t("kform.improvement")} required>
+        <TextArea value={f.improvement} onChange={(e) => set("improvement", e.target.value)} placeholder={t("kform.improvementPlaceholder")} />
       </Field>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="3. งบประมาณที่ใช้ในการปรับปรุง" hint="ใส่แค่ตัวเลข (บาท) และถ้าไม่มี ใส่เลข 0">
+        <Field label={t("kform.budget")} hint={t("kform.budgetHint")}>
           <TextInput type="number" min="0" value={f.budget} onChange={(e) => set("budget", e.target.value)} placeholder="0" />
         </Field>
-        <Field label="4. ผลที่ได้รับ">
-          <TextInput value={f.result} onChange={(e) => set("result", e.target.value)} placeholder="กรอกภายหลังหากยังไม่มีผลลัพธ์" />
+        <Field label={t("kform.result")}>
+          <TextInput value={f.result} onChange={(e) => set("result", e.target.value)} placeholder={t("kform.resultPlaceholder")} />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="5. Cost Saving ที่ได้" hint="ใส่แค่ตัวเลข (บาท ต่อปี) หากไม่มีให้ใส่เลข 0">
+        <Field label={t("kform.costSaving")} hint={t("kform.costSavingHint")}>
           <TextInput type="number" min="0" value={f.costSaving} onChange={(e) => set("costSaving", e.target.value)} placeholder="0" />
         </Field>
-        <Field label="6. การคำนวณผลลัพธ์ (หากมี Cost Saving)" hint="หากไม่มี Cost Saving ไม่ต้องระบุข้อนี้">
-          <TextInput value={f.costSavingCalc} onChange={(e) => set("costSavingCalc", e.target.value)} placeholder="เช่น วิธีคิด/สูตรคำนวณ Cost Saving" />
+        <Field label={t("kform.costSavingCalc")} hint={t("kform.costSavingCalcHint")}>
+          <TextInput value={f.costSavingCalc} onChange={(e) => set("costSavingCalc", e.target.value)} placeholder={t("kform.costSavingCalcPlaceholder")} />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <PhotoGallery label="ภาพก่อนปรับปรุง (Before)" photos={f.images?.before} editable onChange={(v) => setImages("before", v)} onBusyChange={(b) => setPhotoBusy((x) => ({ ...x, before: b }))} />
-        <PhotoGallery label="ภาพหลังปรับปรุง (After)" photos={f.images?.after} editable onChange={(v) => setImages("after", v)} onBusyChange={(b) => setPhotoBusy((x) => ({ ...x, after: b }))} />
+        <PhotoGallery label={t("kform.imageBefore")} photos={f.images?.before} editable onChange={(v) => setImages("before", v)} onBusyChange={(b) => setPhotoBusy((x) => ({ ...x, before: b }))} />
+        <PhotoGallery label={t("kform.imageAfter")} photos={f.images?.after} editable onChange={(v) => setImages("after", v)} onBusyChange={(b) => setPhotoBusy((x) => ({ ...x, after: b }))} />
       </div>
       <AttachmentList
         attachments={f.attachments || []}
@@ -1509,29 +2256,29 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
           </Field>
         </div>
       )}
-      {anyPhotoBusy && <div className="text-xs text-right" style={{ color: SUB }}>กำลังย่อขนาดรูป รอสักครู่ ปุ่มบันทึกจะกดได้เมื่อเสร็จ...</div>}
+      {anyPhotoBusy && <div className="text-xs text-right" style={{ color: SUB }}>{t("kform.busyNote")}</div>}
       {adminMode ? (
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>{t("common.cancel")}</button>
           <button
             disabled={!f.title || anyPhotoBusy}
             onClick={() => onSave(f, adminNote)}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40 flex items-center gap-1.5"
             style={{ background: NAVY }}
           >
-            <CheckCircle2 size={15} /> บันทึกการแก้ไข
+            <CheckCircle2 size={15} /> {t("kform.saveEdit")}
           </button>
         </div>
       ) : (
       <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>ยกเลิก</button>
+        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: "#D8DDE5", color: SUB }}>{t("common.cancel")}</button>
         <button
           disabled={anyPhotoBusy}
           onClick={() => onSave(f, "draft")}
           className="px-4 py-2 rounded-lg text-sm font-medium border disabled:opacity-40"
           style={{ borderColor: NAVY, color: NAVY }}
         >
-          บันทึกแบบร่าง
+          {t("kform.saveDraft")}
         </button>
         <button
           disabled={!f.title || !f.problem || !f.improvement || anyPhotoBusy}
@@ -1539,7 +2286,7 @@ function KaizenForm({ initial, onCancel, onSave, currentUser, departments, admin
           className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40"
           style={{ background: NAVY }}
         >
-          ส่งเรื่อง
+          {t("kform.submit")}
         </button>
       </div>
       )}
@@ -2077,6 +2824,7 @@ function PresentationView({ k }) {
 }
 
 function Table({ rows, actions, showMissing, filterable = true }) {
+  const { t } = useI18n();
   const ordered = useMemo(() => sortNewestFirst(rows), [rows]);
   const flt = useKaizenFilters(ordered);
   const shown = filterable ? flt.filtered : ordered;
@@ -2091,12 +2839,12 @@ function Table({ rows, actions, showMissing, filterable = true }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: "#FAFBFC" }}>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>เลขที่ / วันที่</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>เรื่อง</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>หน่วยงาน</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>หมวดหมู่</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>สถานะ</th>
-              <th className="text-right px-4 py-2.5 font-medium" style={{ color: SUB }}>จัดการ</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>{t("table.no")}</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>{t("table.title")}</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>{t("table.dept")}</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>{t("table.category")}</th>
+              <th className="text-left px-4 py-2.5 font-medium" style={{ color: SUB }}>{t("table.status")}</th>
+              <th className="text-right px-4 py-2.5 font-medium" style={{ color: SUB }}>{t("table.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -2423,6 +3171,7 @@ function FilterableKaizenTable({ rows, onRowClick, onPresent }) {
 }
 
 function Dashboard({ data, departments, onView, onPresent }) {
+  const { t } = useI18n();
   // ตัวกรองทุกตัวเลือกได้หลายค่า (ว่าง = ทุกค่า) · เลือกหลายค่าในตัวกรองเดียวกัน = "หรือ" · ต่างตัวกรอง = "และ"
   const [yearFilter, setYearFilter] = useState([]);
   const [monthFilter, setMonthFilter] = useState([]);
@@ -2573,7 +3322,7 @@ function Dashboard({ data, departments, onView, onPresent }) {
               style={{ color: DB_DEEP }}
               title="Export ข้อมูลตามตัวกรองปัจจุบันเป็นไฟล์ Excel"
             >
-              <Download size={14} /> Export Excel
+              <Download size={14} /> {t("dash.exportExcel")}
             </button>
             <span className="text-xs text-white/70 whitespace-nowrap">อัปเดตล่าสุด: {todayISO()}</span>
           </div>
@@ -2588,19 +3337,19 @@ function Dashboard({ data, departments, onView, onPresent }) {
       </div>
       <div className="grid grid-cols-4 gap-4">
         <div className="rounded-xl p-4 text-white" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
-          <div className="text-xs font-medium text-white/80">Kaizen รวมทั้งหมด</div>
+          <div className="text-xs font-medium text-white/80">{t("dash.kpiTotal")}</div>
           <div className="text-3xl font-semibold mt-1.5">{total}</div>
-          <div className="text-xs mt-1 text-white/70">เฉพาะที่หัวหน้างานอนุมัติแล้ว</div>
+          <div className="text-xs mt-1 text-white/70">{t("dash.kpiTotalSub")}</div>
         </div>
         <div className="rounded-xl p-4" style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
-          <div className="text-xs font-medium" style={{ color: DB_BLUE }}>Kaizen Project</div>
+          <div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiProject")}</div>
           <div className="text-3xl font-semibold mt-1.5" style={{ color: DB_DEEP }}>{kaizenProjectCount}</div>
-          <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>โครงการปรับปรุงเดี่ยว</div>
+          <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>{t("dash.kpiProjectSub")}</div>
         </div>
         <div className="rounded-xl p-4" style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
-          <div className="text-xs font-medium" style={{ color: DB_BLUE }}>Cross functional Kaizen</div>
+          <div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiCross")}</div>
           <div className="text-3xl font-semibold mt-1.5" style={{ color: DB_DEEP }}>{crossFunctionalCount}</div>
-          <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>โครงการข้ามสายงาน</div>
+          <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>{t("dash.kpiCrossSub")}</div>
         </div>
         <div
           className="relative rounded-xl p-4 overflow-hidden"
@@ -2619,11 +3368,11 @@ function Dashboard({ data, departments, onView, onPresent }) {
           >
             <Coins size={16} className="text-white" />
           </div>
-          <div className="text-xs font-semibold text-white/90 relative">มูลค่า Cost Saving</div>
+          <div className="text-xs font-semibold text-white/90 relative">{t("dash.kpiCostSaving")}</div>
           <div className="text-4xl font-extrabold mt-1.5 text-white relative tracking-tight">
             {totalCostSaving.toLocaleString()}
           </div>
-          <div className="text-xs mt-1 text-white/85 font-medium relative">บาท/ปี จาก Kaizen ที่นับ</div>
+          <div className="text-xs mt-1 text-white/85 font-medium relative">{t("dash.kpiCostSavingSub")}</div>
         </div>
       </div>
 
@@ -4864,7 +5613,7 @@ function SyncStatusBar() {
         </div>
         <div className="text-xs mt-1 space-y-1" style={{ color: INK }}>
           {snap.failed.slice(0, 3).map((f) => (
-            <div key={f.id}>• {f.title}<div className="text-[11px] break-words" style={{ color: "#8B2E24" }}>สาเหตุ: {f.error}</div></div>
+            <div key={f.key || f.id}>• {f.title}<div className="text-[11px] break-words" style={{ color: "#8B2E24" }}>สาเหตุ: {f.error}</div></div>
           ))}
           {snap.failed.length > 3 && <div>และอีก {snap.failed.length - 3} เรื่อง</div>}
         </div>
@@ -4882,6 +5631,7 @@ function SyncStatusBar() {
 }
 
 function LoginScreen({ onLogin, users, ready }) {
+  const { lang, setLang, t } = useI18n();
   const [name, setName] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
@@ -4917,13 +5667,13 @@ function LoginScreen({ onLogin, users, ready }) {
   const submit = async () => {
     if (busy || !ready) return;
     if (Date.now() < lockedUntil) {
-      setError(`กรอกรหัสผิดหลายครั้ง กรุณารอ ${Math.ceil((lockedUntil - Date.now()) / 1000)} วินาทีแล้วลองใหม่`);
+      setError(t("login.lockedMsg", { sec: Math.ceil((lockedUntil - Date.now()) / 1000) }));
       return;
     }
     const q = normName(name);
     const candidates = users.filter((u) => normName(u.name) === q);
     if (!candidates.length || !pass) {
-      setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+      setError(t("login.wrongCredentials"));
       return;
     }
     setBusy(true);
@@ -4939,7 +5689,7 @@ function LoginScreen({ onLogin, users, ready }) {
       }
     } catch (e) {
       setBusy(false);
-      setError("เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดเว็บผ่านลิงก์ https");
+      setError(t("login.browserError"));
       return;
     }
     setBusy(false);
@@ -4953,10 +5703,10 @@ function LoginScreen({ onLogin, users, ready }) {
     if (failsRef.current >= 5) {
       failsRef.current = 0;
       setLockedUntil(Date.now() + 30000);
-      setError("กรอกรหัสผิดหลายครั้ง กรุณารอ 30 วินาทีแล้วลองใหม่");
+      setError(t("login.lockedMsg", { sec: 30 }));
       return;
     }
-    setError(inactive ? "บัญชีนี้ถูกปิดการใช้งาน กรุณาติดต่อ Admin" : "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+    setError(inactive ? t("login.disabledAccount") : t("login.wrongCredentials"));
   };
   const handleKeyDown = (e) => {
     if (e.key === "Enter") submit();
@@ -4971,12 +5721,13 @@ function LoginScreen({ onLogin, users, ready }) {
             <img src={COMPANY_LOGO} onError={useLogoFallback} alt="Company Logo" className="w-full h-full object-contain" />
           </div>
           <div>
-            <div className="text-white font-semibold text-sm leading-tight">Kaizen System</div>
-            <div className="text-[11px] leading-tight" style={{ color: "#9FB0C6" }}>เข้าสู่ระบบตามสิทธิ์การใช้งาน</div>
+            <div className="text-white font-semibold text-sm leading-tight">{APP_NAME}</div>
+            <div className="text-[11px] leading-tight" style={{ color: "#9FB0C6" }}>{t("login.subtitle")}</div>
           </div>
         </div>
+        <div className="flex justify-center mb-4"><LanguageSwitcher lang={lang} setLang={setLang} variant="dark" /></div>
         <div className="bg-white rounded-2xl shadow-2xl p-6 space-y-4">
-          <Field label="ชื่อผู้ใช้ (พิมพ์ค้นหาหรือเลือกจากรายชื่อ)" required>
+          <Field label={t("login.usernameLabel")} required>
             <div className="relative">
               <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 z-10" style={{ color: "#AEB6C2" }} />
               <input
@@ -4986,7 +5737,7 @@ function LoginScreen({ onLogin, users, ready }) {
                 onKeyDown={handleKeyDown}
                 className={inputCls}
                 style={{ ...inputStyle, paddingLeft: 32 }}
-                placeholder="พิมพ์ชื่อหน่วยงาน หรือชื่อ-นามสกุล"
+                placeholder={t("login.usernamePlaceholder")}
                 autoComplete="off"
               />
               {open && (
@@ -4995,14 +5746,14 @@ function LoginScreen({ onLogin, users, ready }) {
                   style={{ borderColor: "#D8DDE5" }}
                 >
                   {filteredUsers.length === 0 && (
-                    <div className="px-3 py-2 text-xs" style={{ color: SUB }}>ไม่พบผู้ใช้งานที่ตรงกัน</div>
+                    <div className="px-3 py-2 text-xs" style={{ color: SUB }}>{t("login.noUserFound")}</div>
                   )}
                   {filteredUsers.map((u) => {
                     const deptText =
-                      u.sameName > 1 ? `มี ${u.sameName} บัญชีใช้ชื่อนี้ (แยกด้วยรหัสผ่าน)` :
+                      u.sameName > 1 ? t("login.multipleAccounts", { n: u.sameName }) :
                       u.departments.length === 0 ? "" :
                       u.departments.length <= 2 ? u.departments.join(", ") :
-                      `${u.departments.slice(0, 2).join(", ")} และอีก ${u.departments.length - 2} หน่วยงาน`;
+                      t("login.moreDepartments", { list: u.departments.slice(0, 2).join(", "), n: u.departments.length - 2 });
                     return (
                       <div
                         key={u.id}
@@ -5012,7 +5763,7 @@ function LoginScreen({ onLogin, users, ready }) {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium" style={{ color: INK }}>{u.name}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: "#EAF3FC", color: DB_BLUE }}>{ROLE_LABEL[u.role]}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: "#EAF3FC", color: DB_BLUE }}>{t("role." + u.role)}</span>
                         </div>
                         {deptText && <div className="text-[11px] mt-0.5" style={{ color: SUB }}>{deptText}</div>}
                       </div>
@@ -5022,10 +5773,10 @@ function LoginScreen({ onLogin, users, ready }) {
               )}
             </div>
           </Field>
-          <Field label="รหัสผ่าน" required>
+          <Field label={t("login.passwordLabel")} required>
             <div className="relative">
               <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#AEB6C2" }} />
-              <input ref={passRef} type="password" value={pass} onChange={(e) => setPass(e.target.value)} onFocus={() => setOpen(false)} onKeyDown={handleKeyDown} className={inputCls} style={{ ...inputStyle, paddingLeft: 32 }} placeholder="รหัสผ่านของท่าน" autoComplete="current-password" />
+              <input ref={passRef} type="password" value={pass} onChange={(e) => setPass(e.target.value)} onFocus={() => setOpen(false)} onKeyDown={handleKeyDown} className={inputCls} style={{ ...inputStyle, paddingLeft: 32 }} placeholder={t("login.passwordPlaceholder")} autoComplete="current-password" />
             </div>
           </Field>
           {error && (
@@ -5034,11 +5785,851 @@ function LoginScreen({ onLogin, users, ready }) {
             </div>
           )}
           <button type="button" onClick={submit} disabled={busy || !ready} className="w-full py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-1.5 disabled:opacity-60" style={{ background: NAVY }}>
-            <Lock size={14} /> {!ready ? "กำลังโหลดรายชื่อผู้ใช้..." : busy ? "กำลังตรวจสอบ..." : "เข้าสู่ระบบ"}
+            <Lock size={14} /> {!ready ? t("login.loadingUsers") : busy ? t("login.checking") : t("login.loginBtn")}
           </button>
         </div>
         <div className="w-full text-center text-xs mt-4" style={{ color: "#9FB0C6" }}>
-          ลืมรหัสผ่าน หรือขอบัญชีใหม่ ติดต่อฝ่ายทรัพยากรบุคคล
+          {t("login.forgot")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================================
+// One Point Lesson (OPL) — ใบ OPL แบบ TPM : ประเภท 3 แบบ / ภาพ NG-OK / ประเด็นสำคัญ / บันทึกผู้เรียนรู้ / ผู้จัดทำ-ผู้ตรวจ
+// ======================================================================
+const OPL_CATEGORIES = {
+  basic: { toneA: "#1D5FC9", toneB: "#2F7D5C" },
+  problem: { toneA: "#B23A2E", toneB: "#2F7D5C" },
+  improvement: { toneA: "#6B7686", toneB: "#2F7D5C" },
+};
+const OPL_STATUS = {
+  draft: { bg: "#F1F3F6", fg: "#5B6675" },
+  pending: { bg: "#FDF3E1", fg: "#8A5B14" },
+  published: { bg: "#E9F5EF", fg: "#2F7D5C" },
+  returned: { bg: "#FBEAE8", fg: "#8B2E24" },
+};
+function oplPhotoLabel(category, side, t) {
+  if (category === "problem") return side === "a" ? t("opl.photo.ng") : t("opl.photo.ok");
+  if (category === "improvement") return side === "a" ? t("opl.photo.before") : t("opl.photo.after");
+  return side === "a" ? t("opl.photo.basicA") : t("opl.photo.basicB");
+}
+
+const oplSeq = (o) => {
+  const m = String(o.oplNo || "").match(/(\d+)\s*$/);
+  return m ? parseInt(m[1], 10) : 0;
+};
+function sortOplNewest(list) {
+  return [...list].sort((a, b) => {
+    const da = String(a.date || "").slice(0, 10);
+    const db = String(b.date || "").slice(0, 10);
+    if (da !== db) return da < db ? 1 : -1;
+    const sa = oplSeq(a);
+    const sb = oplSeq(b);
+    if (sa !== sb) return sb - sa;
+    return String(b.id).localeCompare(String(a.id));
+  });
+}
+function newOplNo(opls) {
+  const year = new Date().getFullYear();
+  const max = opls.filter((o) => String(o.oplNo || "").startsWith(`OPL-${year}-`)).reduce((m, o) => Math.max(m, oplSeq(o)), 0);
+  return `OPL-${year}-${String(max + 1).padStart(3, "0")}`;
+}
+function normalizeOpl(o) {
+  const atts = Array.isArray(o.attachments) ? o.attachments : [];
+  const photoAtt = (side) => atts.filter((a) => a && a.kind === "photo" && a.side === side).map((a) => a.dataUrl).filter(Boolean);
+  const arr = (v) => (Array.isArray(v) ? v : []);
+  return {
+    ...o,
+    category: OPL_CATEGORIES[o.category] ? o.category : "basic",
+    status: OPL_STATUS[o.status] ? o.status : "draft",
+    why: o.why || "", note: o.note || "", preparedBy: o.preparedBy || "", reviewedBy: o.reviewedBy || "", reviewedAt: o.reviewedAt || "",
+    keyPoints: arr(o.keyPoints), dos: arr(o.dos), donts: arr(o.donts), pillars: arr(o.pillars), acks: arr(o.acks), history: arr(o.history),
+    images: { before: [...asList(o.images?.before), ...photoAtt("before")], after: [...asList(o.images?.after), ...photoAtt("after")] },
+    attachments: atts.filter((a) => !(a && a.kind === "photo")),
+  };
+}
+function seedOpls() {
+  return [
+    {
+      id: "opl-demo-1", oplNo: "OPL-2026-001", date: "2026-10-20", title: "ตัวอย่าง: การล้างมือ 6 ขั้นตอนก่อนเข้าพื้นที่ผลิต", category: "basic", department: "Packing 1", submittedBy: "Production 1", preparedBy: "ทีมตัวอย่าง",
+      why: "มือที่สะอาดช่วยป้องกันการปนเปื้อนในอาหารและปกป้องตัวเราเอง", keyPoints: ["ล้างด้วยน้ำและสบู่อย่างน้อย 20 วินาที", "ถูให้ทั่วฝ่ามือ หลังมือ ซอกนิ้ว และปลายนิ้ว", "เช็ดมือให้แห้งก่อนสวมถุงมือ"],
+      dos: ["ล้างมือทุกครั้งก่อนเข้าพื้นที่", "ถอดเครื่องประดับก่อนล้าง"], donts: ["ห้ามใช้ผ้าเช็ดมือร่วมกัน"], note: "", pillars: ["Quality"], status: "published", reviewedBy: "หัวหน้างาน (ตัวอย่าง)", reviewedAt: "2026-10-21",
+      images: { before: [], after: [] }, attachments: [], acks: [{ name: "สมหญิง (ตัวอย่าง)", section: "Production 1,3", dept: "Packing 1", by: "Production 1", date: "2026-10-22" }], history: [],
+    },
+    {
+      id: "opl-demo-2", oplNo: "OPL-2026-002", date: "2026-10-24", title: "ตัวอย่าง: ป้ายสีแยกถังขยะ ลดการทิ้งผิดประเภท", category: "improvement", department: "Packing 1", submittedBy: "Production 1", preparedBy: "ทีมตัวอย่าง",
+      why: "ลดความสับสนในการแยกขยะและลดของเสียที่ปนกัน", keyPoints: ["ติดป้ายสีและภาพตัวอย่างที่ถังทุกใบ", "ฝึกทีมให้จำสีตามประเภทขยะ", "หัวหน้างานสุ่มตรวจทุกสัปดาห์"], dos: ["ทิ้งตามสีที่กำหนด"], donts: [], note: "", pillars: ["Cost", "Environment"], status: "published", reviewedBy: "หัวหน้างาน (ตัวอย่าง)", reviewedAt: "2026-10-25",
+      images: { before: [], after: [] }, attachments: [], acks: [], history: [],
+    },
+  ];
+}
+async function fetchOplFromSheet() {
+  const res = await fetch(`${GOOGLE_SHEETS_API_URL}?type=opl`);
+  if (!res.ok) throw new Error("opl fetch failed");
+  const json = await res.json();
+  if (json && !Array.isArray(json) && Array.isArray(json.opl)) return { supported: true, list: json.opl }; // Code.gs เก่าจะตอบเป็นรายการ Kaizen (array)
+  return { supported: false, list: [] };
+}
+
+function OplStatusBadge({ status }) {
+  const { t } = useI18n();
+  const m = OPL_STATUS[status] || OPL_STATUS.draft;
+  return <span className="text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap" style={{ background: m.bg, color: m.fg }}>{t("opl.status." + status)}</span>;
+}
+function OplCategoryBadge({ category }) {
+  const { t } = useI18n();
+  return <span className="text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>{t("opl.category." + category)}</span>;
+}
+
+function OplModeBanner({ mode }) {
+  if (mode === "sheet" || mode === "checking") return null;
+  return (
+    <div className="rounded-lg px-4 py-2.5 text-xs mb-4" style={{ background: "#FDF3E1", color: "#6B4A10" }}>
+      {mode === "unsupported"
+        ? "Code.gs ที่ติดตั้งอยู่ยังไม่รองรับ One Point Lesson (ต้องเป็นเวอร์ชัน 2026-10-28 ขึ้นไป) OPL ที่สร้างตอนนี้จะอยู่เฉพาะในหน้านี้และหายเมื่อรีเฟรช"
+        : "โหมดสาธิต: เชื่อมต่อ Google Sheet ไม่ได้ OPL ที่สร้างจะอยู่เฉพาะในหน้านี้และหายเมื่อรีเฟรช"}
+    </div>
+  );
+}
+
+function OplListEditor({ label, items, onChange, max = 6, placeholder, hint, required }) {
+  const list = items.length ? items : [""];
+  const setAt = (i, v) => onChange(list.map((x, j) => (j === i ? v : x)));
+  return (
+    <div>
+      <div className="text-xs font-medium mb-1.5" style={{ color: SUB }}>
+        {label} {required && <span style={{ color: RED }}>*</span>} {hint && <span className="font-normal" style={{ color: "#A3ABB8" }}>{hint}</span>}
+      </div>
+      <div className="space-y-1.5">
+        {list.map((v, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-5 text-xs text-right flex-shrink-0" style={{ color: SUB }}>{i + 1}.</span>
+            <input value={v} onChange={(e) => setAt(i, e.target.value)} placeholder={placeholder} className={inputCls} style={inputStyle} />
+            <button type="button" title="ลบข้อนี้" onClick={() => onChange(list.filter((_, j) => j !== i))} className="p-1 rounded flex-shrink-0" style={{ color: RED }}><Trash2 size={14} /></button>
+          </div>
+        ))}
+      </div>
+      {list.length < max && (
+        <button type="button" onClick={() => onChange([...list, ""])} className="mt-1.5 text-xs font-medium flex items-center gap-1" style={{ color: NAVY }}>
+          <Plus size={13} /> เพิ่มข้อ
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------- ใบ OPL (A4 แนวนอน) ----------
+const OPL_GUIDE_LANGS = ["th", "mm", "en"];
+const OPL_GUIDE_LABELS = { th: "ไทย", mm: "မြန်မာ", en: "English" };
+const OPL_GUIDE_CONTENT = {
+  th: {
+    title: "เรียนรู้เรื่อง One Point Lesson (OPL) ก่อนเริ่มใช้งาน",
+    what: "OPL คือบทเรียนสั้น ๆ ที่สอนเรื่องเดียวให้ชัดเจน ใช้เวลาอ่านหรือสอนเพียง 5–10 นาที เช่น วิธีทำงานที่ถูกต้อง ข้อควรระวัง หรือตัวอย่างการปรับปรุงงาน ใช้ภาพประกอบง่าย ๆ เพื่อให้เข้าใจเร็ว ช่วยให้ทุกคนเข้าใจตรงกันและลดความผิดพลาดในการทำงาน",
+    stepsTitle: "ขั้นตอนการทำ OPL (แบบกระชับ)",
+    steps: [
+      "เลือกหัวข้อเดียวที่ต้องการสอน ให้ชัดเจนและเจาะจง",
+      "เลือกประเภท: ความรู้พื้นฐาน / กรณีปัญหา / ตัวอย่างการปรับปรุง",
+      "ถ่ายภาพ 2 ภาพ ด้านซ้ายเป็นภาพที่ผิดหรือก่อนปรับปรุง ด้านขวาเป็นภาพที่ถูกต้องหรือหลังปรับปรุง",
+      "เขียนประเด็นสำคัญสั้น ๆ 3–5 ข้อ",
+      "ระบุสิ่งที่ควรทำ (OK) และห้ามทำ (NG) ถ้ามี",
+      "ส่งให้หัวหน้างานตรวจสอบและอนุมัติเผยแพร่",
+      "แบ่งปันให้เพื่อนร่วมงานอ่านและลงชื่อว่าได้เรียนรู้แล้ว",
+    ],
+  },
+  mm: {
+    title: "One Point Lesson (OPL) အကြောင်း စတင်မီ လေ့လာပါ",
+    what: "OPL ဆိုသည်မှာ အချက်တစ်ချက်ကိုသာ ရှင်းရှင်းလင်းလင်း သင်ပေးသည့် သင်ခန်းစာတိုတောင်းတစ်ခု ဖြစ်သည်။ ဖတ်ရန် (သို့) သင်ကြားရန် ၅ မှ ၁၀ မိနစ်သာ ကြာပါသည်။ ဥပမာ—အလုပ်လုပ်ရန် မှန်ကန်သောနည်းလမ်း၊ သတိထားရမည့်အချက်၊ (သို့) တိုးတက်မှုဥပမာများ ဖြစ်သည်။ ရိုးရှင်းသော ပုံများကို အသုံးပြု၍ လူတိုင်း မြန်မြန်နားလည်ကာ အလုပ်လုပ်ရာတွင် အမှားများ လျော့နည်းစေသည်။",
+    stepsTitle: "OPL ပြုလုပ်ရန် အဆင့်များ (အတိုချုပ်)",
+    steps: [
+      "သင်ကြားလိုသော အချက်တစ်ချက်ကိုသာ ရှင်းလင်းတိကျစွာ ရွေးချယ်ပါ",
+      "အမျိုးအစား ရွေးပါ - အခြေခံဗဟုသုတ / ပြဿနာဖြစ်ရပ် / တိုးတက်မှုဥပမာ",
+      "ဓာတ်ပုံ ၂ ပုံ ရိုက်ပါ - ဘယ်ဘက်တွင် မှားသော (သို့) မလုပ်မီပုံ၊ ညာဘက်တွင် မှန်ကန်သော (သို့) လုပ်ပြီးနောက်ပုံ",
+      "အဓိကအချက် ၃ မှ ၅ ချက်ကို တိုတိုရေးပါ",
+      "လုပ်သင့်သည် (OK) နှင့် မလုပ်သင့်သည် (NG) များကို ဖော်ပြပါ (ရှိပါက)",
+      "ကြီးကြပ်ရေးမှူးထံ စစ်ဆေးပြီး ထုတ်ပြန်ခွင့်ပြုရန် ပို့ပါ",
+      "လုပ်ဖော်ကိုင်ဖက်များ ဖတ်ရှုပြီး လေ့လာပြီးကြောင်း လက်မှတ်ရေးထိုးနိုင်ရန် မျှဝေပါ",
+    ],
+  },
+  en: {
+    title: "Learn about One Point Lesson (OPL) before you start",
+    what: 'An OPL is a short lesson that teaches just one clear point. It takes only 5\u201310 minutes to read or teach \u2014 for example, the correct way to do a task, a safety precaution, or an improvement example. Simple pictures make it easy to understand quickly, helping everyone understand the same way and reducing mistakes at work.',
+    stepsTitle: "Steps to create an OPL (brief)",
+    steps: [
+      "Choose one clear, specific topic to teach.",
+      "Choose a category: Basic Knowledge / Problem Case / Improvement Example.",
+      'Take two photos: the wrong or "before" picture on the left, the correct or "after" picture on the right.',
+      "Write 3\u20135 short key points.",
+      "List what to do (OK) and what not to do (NG), if any.",
+      "Submit it for your supervisor to review and approve for publishing.",
+      "Share it with colleagues to read and sign that they have learned it.",
+    ],
+  },
+};
+function ensureMyanmarFont() {
+  if (typeof document === "undefined" || document.getElementById("noto-myanmar-font")) return;
+  const link = document.createElement("link");
+  link.id = "noto-myanmar-font";
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;600;700&display=swap";
+  document.head.appendChild(link);
+}
+// การ์ดความรู้เรื่อง OPL: อธิบายแบบเข้าใจง่าย + ขั้นตอนแบบกระชับ เลือกภาษาได้ 3 ภาษา (ไทย / พม่า / อังกฤษ)
+function OplGuideCard({ variant = "card" }) {
+  const [open, setOpen] = useStoredState("kz_opl_guide_open", true);
+  const { lang, t } = useI18n();
+  useEffect(() => { ensureMyanmarFont(); }, []);
+  const c = OPL_GUIDE_CONTENT[lang];
+  const mmStyle = lang === "mm" ? { fontFamily: "'Noto Sans Myanmar', 'Tahoma', sans-serif" } : undefined;
+  const body = (
+    <div className="px-4 pb-4 space-y-3" style={mmStyle}>
+      <div className="text-base font-semibold" style={{ color: NAVY }}>{c.title}</div>
+      <div className="text-sm leading-relaxed" style={{ color: INK }}>{c.what}</div>
+      <div className="text-sm font-semibold mt-1" style={{ color: NAVY }}>{c.stepsTitle}</div>
+      <ol className="space-y-1.5">
+        {c.steps.map((st, i) => (
+          <li key={i} className="flex gap-2 text-sm leading-snug" style={{ color: INK }}>
+            <span className="flex-shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center text-white" style={{ background: NAVY }}>{i + 1}</span>
+            <span>{st}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+  if (variant === "plain") return body;
+  return (
+    <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "#D8DDE5", background: "#F7FAFE" }}>
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left">
+        <div className="flex items-center gap-2">
+          <BookOpen size={18} style={{ color: NAVY }} />
+          <div className="text-sm font-semibold" style={{ color: INK }}>{t("opl.guide.header")}</div>
+        </div>
+        <ChevronDown size={16} style={{ color: SUB, transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+      </button>
+      {open && body}
+    </div>
+  );
+}
+
+function OplSheet({ o, sheetRef }) {
+  const { t } = useI18n();
+  const cat = OPL_CATEGORIES[o.category] || OPL_CATEGORIES.basic;
+  const before = asList(o.images?.before);
+  const after = asList(o.images?.after);
+  const ackRows = [...(o.acks || []).slice(0, 12)];
+  while (ackRows.length < 6) ackRows.push(null);
+  const InfoBox = ({ label, value }) => (
+    <div className="rounded px-2.5 py-1" style={{ background: "rgba(255,255,255,0.14)" }}>
+      <div className="text-[10px] opacity-70 leading-tight">{label}</div>
+      <div className="text-xs font-semibold leading-tight">{value || "-"}</div>
+    </div>
+  );
+  const ImagePanel = ({ title, tone, photos }) => (
+    <div className="rounded-lg border overflow-hidden" style={{ borderColor: "#D8DDE5" }}>
+      <div className="px-3 py-2 text-sm font-semibold text-white" style={{ background: tone }}>{title}</div>
+      <div className="grid gap-2 p-2" style={{ gridTemplateColumns: "1fr", background: "#FAFBFC" }}>
+        {photos.length === 0 ? (
+          <div className="flex items-center justify-center text-xs rounded" style={{ aspectRatio: "4 / 3", color: "#A3ABB8", background: "#EEF0F3" }}>ไม่มีภาพ</div>
+        ) : (
+          <>
+            {photos.slice(0, 2).map((src, i) => (
+              <div key={i} className="rounded overflow-hidden" style={{ aspectRatio: "4 / 3", background: "#EEF0F3" }}>
+                <img src={src} alt={`${title} ${i + 1}`} className="w-full h-full object-cover" onError={onDriveImgError} />
+              </div>
+            ))}
+            {photos.length > 2 && <div className="text-[11px]" style={{ color: SUB }}>และอีก {photos.length - 2} ภาพ (ดูทั้งหมดในระบบ)</div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+  return (
+    <div ref={sheetRef} className="rounded-xl overflow-hidden border bg-white" style={{ borderColor: "#D8DDE5", color: INK }}>
+      <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ background: NAVY }}>
+        <div className="text-white">
+          <div className="text-xl font-extrabold leading-tight">One Point Lesson</div>
+          <div className="text-[11px] opacity-80">{t("header.oplSubtitle")}</div>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-white" style={{ minWidth: 360 }}>
+          <InfoBox label={t("opl.sheet.no")} value={o.oplNo} />
+          <InfoBox label={t("opl.sheet.date")} value={o.date} />
+          <InfoBox label={t("opl.sheet.dept")} value={o.department} />
+          <InfoBox label={t("opl.sheet.preparedBy")} value={o.preparedBy} />
+        </div>
+      </div>
+      <div className="px-5 py-3 border-b flex items-center justify-between gap-4 flex-wrap" style={{ borderColor: "#D8DDE5", background: "#FAFBFC" }}>
+        <div className="min-w-0">
+          <div className="text-[11px]" style={{ color: SUB }}>{t("opl.sheet.theme")}</div>
+          <div className="text-2xl font-bold leading-snug" style={{ color: INK }}>{o.title}</div>
+        </div>
+        <div className="flex items-center gap-3 text-xs flex-wrap">
+          {Object.keys(OPL_CATEGORIES).map((key) => (
+            <span key={key} className="flex items-center gap-1.5" style={{ color: o.category === key ? NAVY : "#8A93A3", fontWeight: o.category === key ? 700 : 400 }}>
+              <span className="inline-flex items-center justify-center w-4 h-4 border rounded-sm text-[11px] leading-none" style={{ borderColor: o.category === key ? NAVY : "#B7C1D4" }}>{o.category === key ? "✓" : ""}</span>
+              {t("opl.category." + key)}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="p-4 space-y-4 border-b" style={{ borderColor: "#D8DDE5" }}>
+        <div className="grid grid-cols-2 gap-4">
+          <ImagePanel title={oplPhotoLabel(o.category, "a", t)} tone={cat.toneA} photos={before} />
+          <ImagePanel title={oplPhotoLabel(o.category, "b", t)} tone={cat.toneB} photos={after} />
+        </div>
+        {o.why && (
+          <div className="rounded-lg p-3 flex gap-2.5" style={{ background: "#EAF3FC" }}>
+            <Lightbulb size={17} className="flex-shrink-0 mt-0.5" style={{ color: "#1D5FC9" }} />
+            <div className="min-w-0">
+              <div className="text-xs font-semibold mb-0.5" style={{ color: NAVY }}>{t("opl.sheet.why")}</div>
+              <div className="text-sm leading-relaxed" style={{ color: INK }}>{o.why}</div>
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs font-semibold mb-1.5" style={{ color: NAVY }}>{t("opl.sheet.keyPoints")}</div>
+            <ol className="space-y-1.5">
+              {o.keyPoints.map((p, i) => (
+                <li key={i} className="flex gap-2 text-sm leading-snug">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center text-white" style={{ background: NAVY }}>{i + 1}</span>
+                  <span>{p}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="space-y-2">
+            {(o.dos.length > 0 || o.donts.length > 0) && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg p-2" style={{ background: "#E9F5EF" }}>
+                  <div className="text-[11px] font-bold mb-1" style={{ color: "#2F7D5C" }}>{t("opl.sheet.ok")}</div>
+                  <ul className="space-y-0.5 text-xs leading-snug">{o.dos.map((d, i) => <li key={i}>• {d}</li>)}</ul>
+                </div>
+                <div className="rounded-lg p-2" style={{ background: "#FBEAE8" }}>
+                  <div className="text-[11px] font-bold mb-1" style={{ color: "#B23A2E" }}>{t("opl.sheet.ng")}</div>
+                  <ul className="space-y-0.5 text-xs leading-snug">{o.donts.map((d, i) => <li key={i}>• {d}</li>)}</ul>
+                </div>
+              </div>
+            )}
+            {o.note && <div className="rounded-lg p-2 text-xs leading-snug" style={{ background: "#FDF3E1", color: "#6B4A10" }}>{t("opl.sheet.note")} {o.note}</div>}
+            {o.pillars.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {o.pillars.map((p) => <span key={p} className="text-[11px] px-2 py-0.5 rounded" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>{p}</span>)}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="grid border-t" style={{ gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr)", borderColor: "#D8DDE5" }}>
+        <div className="p-3 border-r" style={{ borderColor: "#D8DDE5" }}>
+          <div className="text-xs font-semibold mb-1.5" style={{ color: NAVY }}>{t("opl.sheet.training")}</div>
+          <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#F1F3F6", color: SUB }}>
+                <th className="text-left font-medium px-2 py-1 border" style={{ borderColor: "#D8DDE5" }}>{t("opl.sheet.learnerName")}</th>
+                <th className="text-left font-medium px-2 py-1 border" style={{ borderColor: "#D8DDE5", width: 110 }}>{t("opl.sheet.section")}</th>
+                <th className="text-left font-medium px-2 py-1 border" style={{ borderColor: "#D8DDE5", width: 130 }}>{t("opl.sheet.unit")}</th>
+                <th className="text-left font-medium px-2 py-1 border" style={{ borderColor: "#D8DDE5", width: 88 }}>{t("opl.sheet.date")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ackRows.map((a, i) => (
+                <tr key={i} style={{ height: 22 }}>
+                  <td className="px-2 border" style={{ borderColor: "#D8DDE5" }}>{a ? a.name : ""}</td>
+                  <td className="px-2 border" style={{ borderColor: "#D8DDE5", whiteSpace: "nowrap" }}>{a ? a.section : ""}</td>
+                  <td className="px-2 border" style={{ borderColor: "#D8DDE5", whiteSpace: "nowrap" }}>{a ? a.dept : ""}</td>
+                  <td className="px-2 border" style={{ borderColor: "#D8DDE5", whiteSpace: "nowrap" }}>{a ? a.date : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {(o.acks || []).length > 12 && <div className="text-[11px] mt-1" style={{ color: SUB }}>และอีก {o.acks.length - 12} คน (ดูทั้งหมดในระบบ)</div>}
+        </div>
+        <div className="p-3">
+          <div className="text-xs font-semibold mb-1.5" style={{ color: NAVY }}>{t("opl.sheet.preparerReviewer")}</div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border p-2" style={{ borderColor: "#D8DDE5" }}>
+              <div className="text-[10px]" style={{ color: SUB }}>{t("opl.sheet.preparedBy")}</div>
+              <div className="text-xs font-semibold leading-snug">{o.preparedBy || "-"}</div>
+              <div className="text-[11px]" style={{ color: SUB }}>{o.date}</div>
+            </div>
+            <div className="rounded-lg border p-2" style={{ borderColor: "#D8DDE5" }}>
+              <div className="text-[10px]" style={{ color: SUB }}>{t("opl.sheet.reviewer")}</div>
+              <div className="text-xs font-semibold leading-snug">{o.reviewedBy || "-"}</div>
+              <div className="text-[11px]" style={{ color: SUB }}>{o.reviewedAt || ""}</div>
+            </div>
+          </div>
+          <div className="text-[11px] mt-2" style={{ color: "#8A93A3" }}>{t("opl.sheet.footerNote")}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- ฟอร์มสร้าง/แก้ OPL ----------
+function OplForm({ initial, mode, currentUser, departments, onSave, onClose }) {
+  const isReviewer = currentUser.role === "supervisor" || currentUser.role === "admin";
+  const deptOptions = currentUser.role === "admin" ? departments : currentUser.departments;
+  const [f, setF] = useState(() => ({ ...initial, department: initial.department || deptOptions[0] || "" }));
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const setImages = (side, v) =>
+    setF((x) => {
+      const cur = asList(x.images?.[side]);
+      return { ...x, images: { ...(x.images || {}), [side]: typeof v === "function" ? v(cur) : v } };
+    });
+  const [busy, setBusy] = useState({ before: false, after: false });
+  const [errors, setErrors] = useState([]);
+  const { t } = useI18n();
+  const cat = OPL_CATEGORIES[f.category] || OPL_CATEGORIES.basic;
+  const clean = (arr) => arr.map((s) => String(s || "").trim()).filter(Boolean);
+  const build = () => ({ ...f, title: f.title.trim(), why: f.why.trim(), note: f.note.trim(), preparedBy: f.preparedBy.trim(), keyPoints: clean(f.keyPoints), dos: clean(f.dos), donts: clean(f.donts) });
+  const check = (strict) => {
+    const o = build();
+    const m = [];
+    if (!o.title) m.push(t("opl.form.titleLabel"));
+    if (!o.department) m.push(t("opl.form.deptLabel"));
+    if (strict) {
+      if (!o.preparedBy) m.push(t("opl.form.preparedByLabel"));
+      if (!o.keyPoints.length) m.push(t("opl.form.keyPointsLabel"));
+    }
+    return m;
+  };
+  const go = (intent) => {
+    const m = check(intent === "submit");
+    if (m.length) { setErrors(m); return; }
+    onSave(build(), intent);
+  };
+  const anyBusy = busy.before || busy.after;
+  const togglePillar = (p) => set("pillars", f.pillars.includes(p) ? f.pillars.filter((x) => x !== p) : [...f.pillars, p]);
+  const lastReturn = f.status === "returned" ? [...(f.history || [])].reverse().find((h) => h.action === "ตีกลับให้แก้ไข") : null;
+  return (
+    <div className="space-y-4">
+      {lastReturn && (
+        <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "#FBEAE8", color: "#8B2E24" }}>
+          {t("opl.form.returnedBy")} {lastReturn.actor}{lastReturn.note ? `: ${lastReturn.note}` : ""} {t("opl.form.pleaseFixResend")}
+        </div>
+      )}
+      <div>
+        <div className="text-xs font-medium mb-1.5" style={{ color: SUB }}>{t("opl.form.categoryLabel")} <span style={{ color: RED }}>*</span></div>
+        <div className="grid grid-cols-3 gap-2">
+          {Object.keys(OPL_CATEGORIES).map((key) => (
+            <button key={key} type="button" onClick={() => set("category", key)} className="rounded-lg border px-3 py-2 text-left" style={f.category === key ? { borderColor: NAVY, background: "#EAF0F8", color: NAVY } : { borderColor: "#D8DDE5", color: INK }}>
+              <div className="text-sm font-semibold">{t("opl.category." + key)}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <Field label={t("opl.form.titleLabel")} required>
+        <TextInput value={f.title} onChange={(e) => set("title", e.target.value)} placeholder={t("opl.form.titlePlaceholder")} />
+      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label={t("opl.form.deptLabel")} required>
+          <select className={inputCls} style={inputStyle} value={f.department} onChange={(e) => set("department", e.target.value)}>
+            {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </Field>
+        <Field label={t("opl.form.preparedByLabel")} required>
+          <TextInput value={f.preparedBy} onChange={(e) => set("preparedBy", e.target.value)} placeholder={t("opl.form.preparedByPlaceholder")} />
+        </Field>
+      </div>
+      <Field label={t("opl.form.whyLabel")} hint={t("opl.form.whyHint")}>
+        <TextArea value={f.why} onChange={(e) => set("why", e.target.value)} style={{ minHeight: 60 }} />
+      </Field>
+      <OplListEditor label={t("opl.form.keyPointsLabel")} required hint={t("opl.form.keyPointsHint")} items={f.keyPoints} onChange={(v) => set("keyPoints", v)} max={6} placeholder={t("opl.form.keyPointPlaceholder")} />
+      <div className="grid grid-cols-2 gap-4">
+        <OplListEditor label={t("opl.sheet.ok")} items={f.dos} onChange={(v) => set("dos", v)} max={4} placeholder={t("opl.form.dosPlaceholder")} />
+        <OplListEditor label={t("opl.sheet.ng")} items={f.donts} onChange={(v) => set("donts", v)} max={4} placeholder={t("opl.form.dontsPlaceholder")} />
+      </div>
+      <Field label={t("opl.form.noteLabel")}>
+        <TextInput value={f.note} onChange={(e) => set("note", e.target.value)} />
+      </Field>
+      <div>
+        <div className="text-xs font-medium mb-1.5" style={{ color: SUB }}>{t("opl.form.pillarsLabel")}</div>
+        <div className="flex flex-wrap gap-1.5">
+          {CATEGORY_OPTIONS.map((p) => (
+            <button key={p} type="button" onClick={() => togglePillar(p)} className="text-xs px-2.5 py-1 rounded-full border" style={f.pillars.includes(p) ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: SUB }}>{p}</button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <PhotoGallery label={oplPhotoLabel(f.category, "a", t)} photos={f.images?.before} editable onChange={(v) => setImages("before", v)} onBusyChange={(b) => setBusy((x) => ({ ...x, before: b }))} />
+        <PhotoGallery label={oplPhotoLabel(f.category, "b", t)} photos={f.images?.after} editable onChange={(v) => setImages("after", v)} onBusyChange={(b) => setBusy((x) => ({ ...x, after: b }))} />
+      </div>
+      {anyBusy && <div className="text-xs text-right" style={{ color: SUB }}>{t("kform.busyNote")}</div>}
+      {errors.length > 0 && <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "#FBEAE8", color: "#8B2E24" }}>{t("opl.form.missingPrefix")} {errors.join(" · ")}</div>}
+      <div className="flex justify-end gap-2 pt-1">
+        <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>{t("common.cancel")}</button>
+        {mode === "editor" ? (
+          <button onClick={() => go("edit")} disabled={anyBusy} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>{t("kform.saveEdit")}</button>
+        ) : (
+          <>
+            <button onClick={() => go("draft")} disabled={anyBusy} className="px-4 py-2 rounded-lg text-sm font-medium border disabled:opacity-40" style={{ borderColor: NAVY, color: NAVY }}>{t("kform.saveDraft")}</button>
+            <button onClick={() => go("submit")} disabled={anyBusy} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>{isReviewer ? t("opl.form.submitReviewer") : t("opl.form.submitEmployee")}</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- ดู OPL (ใบ A4 + พิมพ์/ดาวน์โหลด + ลงชื่อเรียนรู้ + ตรวจ) ----------
+function OplDetail({ o, departments, canEdit, canReview, canDelete, onEdit, onDelete, onReview, onAck, onClose }) {
+  const { t } = useI18n();
+  const sheetRef = useRef(null);
+  const [learner, setLearner] = useState("");
+  const sectionGroups = useMemo(() => groupBySection(departments).filter(([, list]) => list.length > 0), [departments]);
+  const [learnerSection, setLearnerSection] = useState("");
+  const [learnerUnit, setLearnerUnit] = useState("");
+  const unitOptions = sectionGroups.find(([sec]) => sec === learnerSection)?.[1] || [];
+  const [msg, setMsg] = useState(null);
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fileBase = `OPL_${o.oplNo || "sheet"}`;
+  const savePng = async () => {
+    setMsg(null);
+    setSaving(true);
+    try {
+      const r = await downloadPosterPng(sheetRef.current, `${fileBase}.png`, setStep);
+      if (r.missing > 0) setMsg({ type: "warn", text: t("opl.detail.pngMissing", { missing: r.missing, total: r.total }) });
+    } catch (e) {
+      setMsg({ type: "error", text: t("opl.detail.pngError") });
+    }
+    setSaving(false);
+    setStep("");
+  };
+  const ack = async () => {
+    setBusy(true);
+    const r = await onAck(o, { name: learner, section: learnerSection, dept: learnerUnit });
+    setBusy(false);
+    if (r.ok) { setLearner(""); setLearnerSection(""); setLearnerUnit(""); setMsg({ type: "ok", text: t("opl.detail.ackSuccess") }); } else setMsg({ type: "error", text: r.error });
+  };
+  const ackReady = learner.trim() && learnerSection && learnerUnit;
+  const review = async (decision) => {
+    if (decision === "return" && !comment.trim()) { setMsg({ type: "error", text: t("opl.detail.reviewReturnError") }); return; }
+    setBusy(true);
+    await onReview(o, decision, comment.trim());
+    onClose(); // ตรวจเสร็จแล้วปิดหน้าต่าง กลับไปที่รายการ
+  };
+  const msgStyle = msg && (msg.type === "ok" ? { background: "#E9F5EF", color: "#1E5A40" } : msg.type === "warn" ? { background: "#FDF3E1", color: "#6B4A10" } : { background: "#FBEAE8", color: "#8B2E24" });
+  return (
+    <Modal
+      title={`${o.oplNo} · ${o.title}`}
+      onClose={onClose}
+      wide
+      headerExtra={
+        <div className="flex items-center gap-2">
+          {canEdit && <button onClick={() => onEdit(o)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: "#6A4BC9" }}><Pencil size={13} /> แก้ไข</button>}
+          {canDelete && <button onClick={() => onDelete(o)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-white" style={{ borderColor: RED, color: RED }}><Trash2 size={13} /> ลบ</button>}
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <OplStatusBadge status={o.status} />
+          <OplCategoryBadge category={o.category} />
+          <span className="text-xs mr-auto" style={{ color: SUB }}>{t("opl.detail.learnedCount", { n: o.acks.length })}</span>
+          <button onClick={savePng} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-60" style={{ background: NAVY }}>
+            <Download size={14} /> {saving ? step || t("opl.detail.generating") : t("opl.detail.downloadPng")}
+          </button>
+          <button onClick={() => printPoster(sheetRef.current, fileBase)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: NAVY, color: NAVY }}>
+            <Printer size={14} /> {t("opl.detail.printPdf")}
+          </button>
+        </div>
+        {msg && <div className="text-xs rounded-lg px-3 py-2" style={msgStyle}>{msg.text}</div>}
+        <OplSheet o={o} sheetRef={sheetRef} />
+        {o.status === "published" && (
+          <div className="rounded-xl border p-4" style={{ borderColor: "#D8DDE5", background: "#F7FAFE" }}>
+            <div className="text-sm font-semibold mb-1" style={{ color: INK }}>{t("opl.detail.signTitle")}</div>
+            <div className="text-xs mb-2" style={{ color: SUB }}>{t("opl.detail.signDesc")}</div>
+            <div className="grid grid-cols-4 gap-2">
+              <select className={inputCls} style={inputStyle} value={learnerSection} onChange={(e) => { setLearnerSection(e.target.value); setLearnerUnit(""); }}>
+                <option value="">{t("opl.detail.section")}</option>
+                {sectionGroups.map(([sec]) => <option key={sec} value={sec}>{sec}</option>)}
+              </select>
+              <select className={inputCls} style={inputStyle} value={learnerUnit} onChange={(e) => setLearnerUnit(e.target.value)} disabled={!learnerSection}>
+                <option value="">{t("opl.detail.unit")}</option>
+                {unitOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <input value={learner} onChange={(e) => setLearner(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ackReady && ack()} placeholder={t("opl.detail.learnerName")} className={inputCls + " col-span-2"} style={inputStyle} />
+            </div>
+            <div className="flex justify-end mt-2">
+              <button onClick={ack} disabled={busy || !ackReady} className="px-4 py-2 rounded-lg text-sm font-semibold text-white whitespace-nowrap disabled:opacity-40" style={{ background: GREEN }}>{t("opl.detail.signBtn")}</button>
+            </div>
+          </div>
+        )}
+        {canReview && o.status === "pending" && (
+          <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "#E8C77E", background: "#FFFBF2" }}>
+            <div className="text-sm font-semibold" style={{ color: INK }}>{t("opl.detail.reviewTitle")}</div>
+            <TextInput value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t("opl.detail.commentPlaceholder")} />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => review("return")} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-medium border disabled:opacity-50" style={{ borderColor: RED, color: RED }}>{t("opl.detail.returnBtn")}</button>
+              <button onClick={() => review("approve")} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: GREEN }}>{t("opl.detail.approveBtn")}</button>
+            </div>
+          </div>
+        )}
+        {o.history.length > 0 && (
+          <div>
+            <div className="text-xs font-semibold mb-1.5" style={{ color: SUB }}>{t("opl.detail.history")}</div>
+            <div className="space-y-1">
+              {[...o.history].reverse().map((h, i) => (
+                <div key={i} className="text-xs flex gap-2" style={{ color: SUB }}>
+                  <span className="flex-shrink-0">{h.date}</span>
+                  <span><strong style={{ color: INK, fontWeight: 600 }}>{h.actor}</strong> · {h.action}{h.note ? ` — ${h.note}` : ""}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function OplDeleteModal({ o, onConfirm, onClose }) {
+  const { t } = useI18n();
+  const [reason, setReason] = useState("");
+  const [ack, setAck] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const go = async () => {
+    if (busy || !ack) return;
+    setBusy(true);
+    setErr("");
+    const r = await onConfirm(o, reason.trim());
+    setBusy(false);
+    if (!r.ok) setErr(r.error);
+  };
+  return (
+    <Modal title={t("opl.delete.title")} onClose={onClose}>
+      <div className="space-y-3">
+        <div className="rounded-lg border p-3" style={{ borderColor: "#F0C3BD", background: "#FDF4F3" }}>
+          <div className="text-[11px]" style={{ color: SUB }}>{o.oplNo} · {o.date}</div>
+          <div className="text-sm font-semibold" style={{ color: INK }}>{o.title}</div>
+          <div className="text-xs mt-1 flex items-center gap-2" style={{ color: SUB }}>{t("opl.sheet.dept")} {o.department} · <OplStatusBadge status={o.status} /></div>
+        </div>
+        <div className="text-xs" style={{ color: INK }}>{t("opl.delete.note")}</div>
+        <Field label={t("opl.delete.reason")}><TextInput value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("opl.delete.reasonPlaceholder")} /></Field>
+        <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: INK }}><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> {t("opl.delete.confirm")}</label>
+        {err && <div className="text-xs rounded-lg px-3 py-2" style={{ background: "#FBEAE8", color: "#8B2E24" }}>{err}</div>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: "#D8DDE5", color: SUB }}>{t("common.cancel")}</button>
+          <button onClick={go} disabled={!ack || busy} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5 disabled:opacity-40" style={{ background: RED }}><Trash2 size={15} /> {busy ? "กำลังลบ..." : "ลบ OPL"}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------- คลัง OPL (ทุกคนอ่านได้) ----------
+function OplLibrary({ opls, departments, onOpen, mode }) {
+  const { t } = useI18n();
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("all");
+  const [depts, setDepts] = useState([]);
+  const published = useMemo(() => sortOplNewest(opls.filter((o) => o.status === "published")), [opls]);
+  const shown = published.filter((o) => {
+    if (cat !== "all" && o.category !== cat) return false;
+    if (depts.length && !depts.includes(o.department)) return false;
+    const t = q.trim().toLowerCase();
+    return !t || [o.title, o.oplNo, o.department, o.preparedBy, o.why, ...o.keyPoints].join(" ").toLowerCase().includes(t);
+  });
+  return (
+    <>
+      <div className="mb-4">
+        <div className="text-lg font-semibold" style={{ color: INK }}>{t("opl.library.title")}</div>
+        <div className="text-sm" style={{ color: SUB }}>{t("opl.library.subtitle")}</div>
+      </div>
+      <OplGuideCard />
+      <OplModeBanner mode={mode} />
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "#AEB6C2" }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("opl.library.searchPlaceholder")} className="rounded-lg border pl-8 pr-3 py-1.5 text-sm w-72 outline-none" style={{ borderColor: "#D8DDE5", color: INK }} />
+        </div>
+        {[["all", t("common.all")], ...Object.keys(OPL_CATEGORIES).map((k) => [k, t("opl.category." + k)])].map(([key, label]) => (
+          <button key={key} onClick={() => setCat(key)} className="text-xs px-3 py-1.5 rounded-full border font-medium" style={cat === key ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: SUB }}>
+            {label} ({key === "all" ? published.length : published.filter((o) => o.category === key).length})
+          </button>
+        ))}
+        <MultiSelectFilter label={t("opl.sheet.dept")} allLabel={t("opl.library.allDept")} queryIsFilter={false} options={departments.map((d) => ({ value: d, label: d }))} selected={depts} onSelected={setDepts} />
+      </div>
+      {shown.length === 0 ? (
+        <div className="rounded-xl border bg-white py-14 text-center text-sm" style={{ borderColor: "#E3E7ED", color: SUB }}>
+          {published.length === 0 ? t("opl.library.emptyNone") : t("opl.library.emptyFiltered")}
+        </div>
+      ) : (
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+          {shown.map((o) => {
+            const thumb = asList(o.images?.before)[0] || asList(o.images?.after)[0];
+            return (
+              <button key={o.id} onClick={() => onOpen(o)} className="text-left rounded-xl border bg-white overflow-hidden hover:shadow-md transition" style={{ borderColor: "#E3E7ED" }}>
+                <div className="flex items-center justify-center" style={{ aspectRatio: "16 / 9", background: "#EEF0F3" }}>
+                  {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" onError={onDriveImgError} /> : <BookOpen size={30} style={{ color: "#B7C1D4" }} />}
+                </div>
+                <div className="p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap"><OplCategoryBadge category={o.category} /><span className="text-[11px]" style={{ color: "#A3ABB8" }}>{o.oplNo}</span></div>
+                  <div className="text-sm font-semibold leading-snug" style={{ color: INK }}>{o.title}</div>
+                  <div className="text-xs" style={{ color: SUB }}>{o.department} · {o.date}</div>
+                  <div className="text-[11px]" style={{ color: "#8A93A3" }}>{t("opl.detail.learnedCount", { n: o.acks.length })}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---------- OPL ของฉัน ----------
+function OplMine({ rows, canEditRow, onNew, onOpen, onEdit, mode }) {
+  const { t } = useI18n();
+  const ordered = sortOplNewest(rows);
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div>
+          <div className="text-lg font-semibold" style={{ color: INK }}>{t("opl.mine.title")}</div>
+          <div className="text-sm" style={{ color: SUB }}>{t("opl.mine.subtitle")}</div>
+        </div>
+        <button onClick={onNew} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: NAVY }}><PlusCircle size={16} /> {t("opl.mine.newBtn")}</button>
+      </div>
+      <OplModeBanner mode={mode} />
+      <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#E3E7ED" }}>
+        <table className="w-full text-sm">
+          <thead><tr style={{ background: "#FAFBFC", color: SUB }}>{[t("opl.sheet.no"), t("table.title"), t("table.category"), t("table.dept"), t("table.status"), t("table.actions")].map((h, i) => <th key={h} className={`px-4 py-2.5 font-medium ${i === 5 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
+          <tbody>
+            {ordered.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: SUB }}>{t("opl.mine.empty")}</td></tr>}
+            {ordered.map((o) => (
+              <tr key={o.id} className="border-t" style={{ borderColor: "#EEF0F3" }}>
+                <td className="px-4 py-2.5"><div className="font-medium" style={{ color: INK }}>{o.oplNo}</div><div className="text-xs" style={{ color: SUB }}>{o.date}</div></td>
+                <td className="px-4 py-2.5" style={{ color: INK }}>{o.title}</td>
+                <td className="px-4 py-2.5"><OplCategoryBadge category={o.category} /></td>
+                <td className="px-4 py-2.5 text-xs" style={{ color: SUB }}>{o.department}</td>
+                <td className="px-4 py-2.5"><OplStatusBadge status={o.status} /></td>
+                <td className="px-4 py-2.5"><div className="flex justify-end gap-1.5">
+                  <IconBtn icon={Eye} label={t("common.view")} onClick={() => onOpen(o)} color={NAVY} />
+                  {canEditRow(o) && <IconBtn icon={Pencil} label={t("common.edit")} onClick={() => onEdit(o)} color="#6A4BC9" />}
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+// ---------- ตรวจ / จัดการ OPL (หัวหน้างาน: เฉพาะหน่วยงานตน, Admin: ทั้งหมด) ----------
+function OplManage({ rows, isAdmin, onOpen, onEdit, onDelete, mode }) {
+  const { t } = useI18n();
+  const [q, setQ] = useState("");
+  const [st, setSt] = useState("all");
+  const ordered = sortOplNewest(rows);
+  const pending = ordered.filter((o) => o.status === "pending");
+  const list = ordered.filter((o) => {
+    if (st !== "all" && o.status !== st) return false;
+    const t = q.trim().toLowerCase();
+    return !t || [o.title, o.oplNo, o.department, o.preparedBy, o.submittedBy].join(" ").toLowerCase().includes(t);
+  });
+  const Row = ({ o }) => (
+    <tr className="border-t" style={{ borderColor: "#EEF0F3" }}>
+      <td className="px-4 py-2.5"><div className="font-medium" style={{ color: INK }}>{o.oplNo}</div><div className="text-xs" style={{ color: SUB }}>{o.date}</div></td>
+      <td className="px-4 py-2.5" style={{ color: INK }}>{o.title}</td>
+      <td className="px-4 py-2.5"><OplCategoryBadge category={o.category} /></td>
+      <td className="px-4 py-2.5 text-xs" style={{ color: SUB }}>{o.department}<div>{t("opl.table.submittedBy", { name: o.submittedBy })}</div></td>
+      <td className="px-4 py-2.5"><OplStatusBadge status={o.status} /></td>
+      <td className="px-4 py-2.5"><div className="flex justify-end gap-1.5">
+        <IconBtn icon={o.status === "pending" ? ClipboardCheck : Eye} label={o.status === "pending" ? t("opl.manage.review") : t("common.view")} onClick={() => onOpen(o)} color={o.status === "pending" ? GREEN : NAVY} filled={o.status === "pending"} />
+        <IconBtn icon={Pencil} label={t("common.edit")} onClick={() => onEdit(o)} color="#6A4BC9" />
+        {isAdmin && <IconBtn icon={Trash2} label={t("common.delete")} onClick={() => onDelete(o)} color={RED} />}
+      </div></td>
+    </tr>
+  );
+  const Head = () => <thead><tr style={{ background: "#FAFBFC", color: SUB }}>{[t("opl.sheet.no"), t("table.title"), t("table.category"), t("table.dept"), t("table.status"), t("table.actions")].map((h, i) => <th key={h} className={`px-4 py-2.5 font-medium ${i === 5 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>;
+  return (
+    <>
+      <div className="mb-4">
+        <div className="text-lg font-semibold" style={{ color: INK }}>{isAdmin ? t("opl.manage.titleAdmin") : t("opl.manage.titleDept")}</div>
+        <div className="text-sm" style={{ color: SUB }}>{t("opl.manage.subtitle")}{isAdmin ? ` ${t("opl.manage.adminDeleteNote")}` : ""}</div>
+      </div>
+      <OplModeBanner mode={mode} />
+      <div className="text-sm font-semibold mb-2" style={{ color: INK }}>{t("opl.manage.pending")} ({pending.length})</div>
+      <div className="bg-white rounded-xl border overflow-hidden mb-6" style={{ borderColor: "#E3E7ED" }}>
+        <table className="w-full text-sm"><Head /><tbody>
+          {pending.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: SUB }}>{t("opl.manage.emptyPending")}</td></tr>}
+          {pending.map((o) => <Row key={o.id} o={o} />)}
+        </tbody></table>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <div className="text-sm font-semibold mr-2" style={{ color: INK }}>{t("opl.manage.all")} ({ordered.length})</div>
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "#AEB6C2" }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("common.search")} className="rounded-lg border pl-8 pr-3 py-1.5 text-sm w-56 outline-none" style={{ borderColor: "#D8DDE5", color: INK }} />
+        </div>
+        {[["all", t("opl.manage.allStatus")], ...Object.keys(OPL_STATUS).map((k) => [k, t("opl.status." + k)])].map(([key, label]) => (
+          <button key={key} onClick={() => setSt(key)} className="text-xs px-3 py-1.5 rounded-full border font-medium" style={st === key ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: SUB }}>{label}</button>
+        ))}
+      </div>
+      <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#E3E7ED" }}>
+        <table className="w-full text-sm"><Head /><tbody>
+          {list.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: SUB }}>{t("common.notFound")}</td></tr>}
+          {list.map((o) => <Row key={o.id} o={o} />)}
+        </tbody></table>
+      </div>
+    </>
+  );
+}
+
+// ---------- หน้า "สองประตู" หลังล็อกอิน ----------
+function GatewayPage({ currentUser, kaizenStat, oplStat, onEnter, onLogout, onUsers, isAdmin }) {
+  const { lang, setLang, t } = useI18n();
+  const Door = ({ n, title, sub, desc, stat, icon: Icon, onClick, id }) => (
+    <button
+      data-door={id}
+      onClick={onClick}
+      className="text-left rounded-2xl bg-white p-7 flex flex-col gap-4 transition hover:-translate-y-1 hover:shadow-2xl"
+      style={{ boxShadow: "0 10px 30px rgba(0,0,0,0.25)", minHeight: 330 }}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center justify-center text-white text-2xl font-extrabold" style={{ width: 56, height: 64, background: NAVY, clipPath: "polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)" }}>{n}</div>
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "#EAF0F8" }}><Icon size={24} style={{ color: NAVY }} /></div>
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: GOLD }}>{sub}</div>
+        <div className="text-2xl font-bold leading-snug mt-0.5" style={{ color: INK }}>{title}</div>
+      </div>
+      <div className="text-sm leading-relaxed" style={{ color: SUB }}>{desc}</div>
+      <div className="mt-auto flex items-center justify-between gap-3">
+        <span className="text-xs px-3 py-1 rounded-full font-medium" style={{ background: "#EAF3FC", color: "#1D5FC9" }}>{stat}</span>
+        <span className="flex items-center gap-1 text-sm font-semibold" style={{ color: NAVY }}>{t("gate.enterDoor", { n })} <ChevronRight size={16} /></span>
+      </div>
+    </button>
+  );
+  return (
+    <div className="min-h-screen w-full flex flex-col" style={{ background: `linear-gradient(160deg, ${NAVY_DEEP}, ${NAVY})`, fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif" }}>
+      <div className="max-w-5xl w-full mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-white p-1"><img src={COMPANY_LOGO} onError={useLogoFallback} alt="Company Logo" className="w-full h-full object-contain" /></div>
+          <div className="text-white font-semibold text-sm leading-tight">{APP_NAME}</div>
+        </div>
+        <div className="flex items-center gap-3">
+          <LanguageSwitcher lang={lang} setLang={setLang} variant="dark" />
+          {isAdmin && <button onClick={onUsers} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg" style={{ color: "#C7D2E0", border: "1px solid #3A5078" }}><Users size={14} /> {t("gate.manageUsers")}</button>}
+          <div className="text-right leading-tight"><div className="text-white text-xs font-medium">{currentUser.name}</div><div className="text-[10px]" style={{ color: "#9FB0C6" }}>{t("role." + currentUser.role)}</div></div>
+          <button onClick={onLogout} title={t("gate.logoutTitle")} className="p-1.5 rounded-lg" style={{ color: "#C7D2E0" }}><LogOut size={16} /></button>
+        </div>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-10">
+        <div className="text-center mb-8">
+          <div className="text-white text-3xl font-bold">{t("gate.hello")} {currentUser.name}</div>
+          <div className="mt-2 text-sm" style={{ color: "#B7C5D8" }}>{t("gate.choosePrompt")}</div>
+        </div>
+        <div className="grid gap-6 w-full max-w-4xl" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+          <Door id="kaizen" n="1" sub={t("gate.door1.sub")} title={t("gate.door1.title")} desc={t("gate.door1.desc")} stat={kaizenStat} icon={TrendingUp} onClick={() => onEnter("kaizen")} />
+          <Door id="opl" n="2" sub={t("gate.door2.sub")} title={t("gate.door2.title")} desc={t("gate.door2.desc")} stat={oplStat} icon={BookOpen} onClick={() => onEnter("opl")} />
         </div>
       </div>
     </div>
@@ -5134,6 +6725,42 @@ export default function KaizenApp() {
   const [departments, setDepartments] = useState(DEFAULT_DEPARTMENTS);
   const [, setSectionList] = useState(() => [...SECTION_OPTIONS]); // ใช้กระตุ้นให้หน้าจอวาดใหม่เมื่อรายการฝ่ายเปลี่ยน
   const [tab, setTab] = useStoredState("kz_tab", "dashboard");
+  // หน้าสองประตู: gate = เลือกประตู · kaizen = ประตูที่ 1 · opl = ประตูที่ 2 (One Point Lesson)
+  const [lang, setLang] = useStoredState("kz_lang", "th");
+  const t = useMemo(() => makeTranslator(lang), [lang]);
+  const [moduleKey, setModuleKey] = useStoredState("kz_module", "gate");
+  // ตั้งชื่อแท็บเบราว์เซอร์ให้ตรงกับชื่อแอป (ไฟล์ index.html ของโปรเจกต์กำหนดชื่อตั้งต้นไว้ ชื่อนี้จะทับให้ตรงกันเสมอ)
+  useEffect(() => {
+    document.title = moduleKey === "opl" ? `${APP_NAME} \u00b7 One Point Lesson` : APP_NAME;
+  }, [moduleKey]);
+  const [opls, setOpls] = useState([]);
+  const [oplMode, setOplMode] = useState("checking"); // checking | sheet | unsupported | demo
+  const [oplForm, setOplForm] = useState(null); // { mode: "author" | "editor", initial }
+  const [oplViewId, setOplViewId] = useState(null);
+  const [oplDeleting, setOplDeleting] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    fetchOplFromSheet()
+      .then((res) => {
+        if (!alive) return;
+        if (res.supported) {
+          setOplMode("sheet");
+          setOpls(res.list.map(normalizeOpl));
+        } else {
+          setOplMode("unsupported");
+          setOpls(seedOpls().map(normalizeOpl));
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        setOplMode("demo");
+        setOpls(seedOpls().map(normalizeOpl));
+      });
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    syncState.oplTracking = oplMode === "sheet";
+  }, [oplMode]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -5518,39 +7145,133 @@ export default function KaizenApp() {
     setRecalling(null);
   };
 
-  const ALL_NAV = [
-    { key: "dashboard", label: "แดชบอร์ด", icon: LayoutDashboard, roles: ["employee", "supervisor", "admin", "director"] },
-    { key: "employee", label: "พนักงาน", icon: User, roles: ["employee"] },
-    { key: "supervisor", label: "หัวหน้างาน", icon: ShieldCheck, roles: ["supervisor"] },
-    { key: "admin", label: "Admin", icon: ClipboardList, roles: ["admin"] },
-    { key: "director", label: "ผู้อำนวยการ", icon: Building2, roles: ["director"] },
-    { key: "award", label: "Kaizen Award", icon: Trophy, roles: ["admin", "director"] },
-    { key: "users", label: "จัดการผู้ใช้", icon: Users, roles: ["admin"] },
-    { key: "judge", label: "ให้คะแนน Kaizen Award", icon: Medal, roles: ["judge"] },
+  // ---------- One Point Lesson: สิทธิ์และการทำงาน ----------
+  const oplIsOwn = (o) => [currentUser.name, ...(currentUser.aliases || [])].includes(o.submittedBy);
+  const oplIsEditor = (o) => currentUser.role === "admin" || (currentUser.role === "supervisor" && (currentUser.departments || []).includes(o.department));
+  const oplCanAuthorEdit = (o) => oplIsOwn(o) && (o.status === "draft" || o.status === "returned") && ["employee", "supervisor", "admin"].includes(currentUser.role);
+  const emptyOpl = () => ({ id: null, category: "basic", title: "", department: "", preparedBy: "", why: "", keyPoints: ["", "", ""], dos: [], donts: [], note: "", pillars: [], status: "draft", images: { before: [], after: [] }, attachments: [], acks: [], history: [] });
+  const openNewOpl = () => setOplForm({ mode: "author", initial: emptyOpl() });
+  const openEditOpl = (o) => { setOplViewId(null); setOplForm({ mode: oplCanAuthorEdit(o) ? "author" : "editor", initial: o }); };
+  const upsertOpl = (rec) => {
+    setOpls((list) => (list.some((x) => x.id === rec.id) ? list.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...list]));
+    syncOplToSheet("oplSave", rec);
+  };
+  const saveOplRecord = (data, intent) => {
+    const isReviewer = currentUser.role === "supervisor" || currentUser.role === "admin";
+    const hist = (action, note = "") => ({ date: nowStamp(), actor: currentUser.name, action, note });
+    const prev = data.id ? opls.find((x) => x.id === data.id) : null;
+    let status = prev ? prev.status : "draft";
+    let extra = {};
+    const history = [...(prev ? prev.history : [])];
+    if (intent === "draft") {
+      status = "draft";
+      history.push(hist("บันทึกแบบร่าง"));
+    } else if (intent === "submit") {
+      if (isReviewer) {
+        status = "published";
+        extra = { reviewedBy: currentUser.name, reviewedAt: todayISO() };
+        history.push(hist("เผยแพร่", "ผู้จัดทำเป็นผู้ตรวจ"));
+      } else {
+        status = "pending";
+        history.push(hist("ส่งให้หัวหน้างานตรวจ"));
+      }
+    } else {
+      history.push(hist("แก้ไขข้อมูล"));
+    }
+    const base = prev || { id: uid(), oplNo: newOplNo(opls), date: todayISO(), submittedBy: currentUser.name };
+    const rec = normalizeOpl({ ...base, ...data, id: base.id, oplNo: base.oplNo, date: base.date, submittedBy: base.submittedBy, status, history, ...extra });
+    upsertOpl(rec);
+    setOplForm(null);
+    setOplViewId(null);
+  };
+  const reviewOplRecord = async (o, decision, comment) => {
+    const approve = decision === "approve";
+    const rec = normalizeOpl({
+      ...o,
+      status: approve ? "published" : "returned",
+      reviewedBy: approve ? currentUser.name : o.reviewedBy,
+      reviewedAt: approve ? todayISO() : o.reviewedAt,
+      history: [...o.history, { date: nowStamp(), actor: currentUser.name, action: approve ? "อนุมัติเผยแพร่" : "ตีกลับให้แก้ไข", note: comment || "" }],
+    });
+    upsertOpl(rec);
+  };
+  const ackOplRecord = async (o, payload) => {
+    const nm = String((payload && payload.name) || "").trim();
+    const section = String((payload && payload.section) || "").trim();
+    const dept = String((payload && payload.dept) || "").trim();
+    if (!nm) return { ok: false, error: "กรุณาใส่ชื่อผู้เรียนรู้" };
+    if (!section || !dept) return { ok: false, error: "กรุณาเลือกฝ่าย (Section) และหน่วยงาน (Unit)" };
+    if (o.acks.some((a) => normName(a.name) === normName(nm))) return { ok: false, error: `"${nm}" ลงชื่อไว้แล้ว` };
+    const ack = { name: nm, section, dept, by: currentUser.name, date: todayISO() };
+    if (syncState.oplTracking) {
+      const r = await postToSheet("oplAck", { id: o.id, ...ack });
+      if (!r.ok) return { ok: false, error: `บันทึกไม่สำเร็จ: ${r.error}` };
+    }
+    setOpls((list) => list.map((x) => (x.id === o.id ? { ...x, acks: [...x.acks, ack] } : x)));
+    return { ok: true };
+  };
+  const deleteOplRecord = async (o, reason) => {
+    if (currentUser.role !== "admin") return { ok: false, error: "เฉพาะ Admin เท่านั้นที่ลบ OPL ได้" };
+    if (syncState.oplTracking) {
+      const r = await postToSheet("oplDelete", { id: o.id, deletedBy: currentUser.name, reason });
+      if (!r.ok) return { ok: false, error: /ไม่รู้จัก action/.test(r.error || "") ? "Code.gs ยังเป็นเวอร์ชันเก่า (ยังไม่รองรับ OPL) ให้อัปเดต Code.gs แล้ว Deploy ก่อน" : `ลบไม่สำเร็จ: ${r.error || "ไม่ทราบสาเหตุ"}` };
+    }
+    setOpls((list) => list.filter((x) => x.id !== o.id));
+    setOplDeleting(null);
+    setOplViewId(null);
+    return { ok: true };
+  };
+  const OPL_NAV = [
+    { key: "opl_library", label: t("nav.oplLibrary"), icon: BookOpen, roles: ["employee", "supervisor", "admin", "director"] },
+    { key: "opl_mine", label: t("nav.oplMine"), icon: FileText, roles: ["employee", "supervisor", "admin"] },
+    { key: "opl_manage", label: t("nav.oplManage"), icon: ClipboardCheck, roles: ["supervisor", "admin"] },
+    { key: "users", label: t("nav.users"), icon: Users, roles: ["admin"] },
   ];
-  const NAV = currentUser ? ALL_NAV.filter((n) => n.roles.includes(currentUser.role)) : ALL_NAV;
-  // ถ้าหน้าที่จำไว้ไม่ตรงกับสิทธิ์ของผู้ใช้ ให้พาไปหน้าตามสิทธิ์ของตนเอง
+  const activeModule = currentUser && currentUser.role === "judge" ? "kaizen" : moduleKey;
+
+  const ALL_NAV = [
+    { key: "dashboard", label: t("nav.dashboard"), icon: LayoutDashboard, roles: ["employee", "supervisor", "admin", "director"] },
+    { key: "employee", label: t("nav.employee"), icon: User, roles: ["employee"] },
+    { key: "supervisor", label: t("nav.supervisor"), icon: ShieldCheck, roles: ["supervisor"] },
+    { key: "admin", label: t("nav.admin"), icon: ClipboardList, roles: ["admin"] },
+    { key: "director", label: t("nav.director"), icon: Building2, roles: ["director"] },
+    { key: "award", label: t("nav.award"), icon: Trophy, roles: ["admin", "director"] },
+    { key: "users", label: t("nav.users"), icon: Users, roles: ["admin"] },
+    { key: "judge", label: t("nav.judge"), icon: Medal, roles: ["judge"] },
+  ];
+  const NAV_SOURCE = activeModule === "opl" ? OPL_NAV : ALL_NAV;
+  const NAV = currentUser ? NAV_SOURCE.filter((n) => n.roles.includes(currentUser.role)) : NAV_SOURCE;
+  // ถ้าหน้าที่จำไว้ไม่ตรงกับสิทธิ์/ประตูที่อยู่ ให้พาไปหน้าตั้งต้นของประตูนั้น
   useEffect(() => {
-    if (currentUser && !NAV.some((n) => n.key === tab)) setTab(currentUser.role);
-  }, [currentUser, tab]);
+    if (currentUser && activeModule !== "gate" && !NAV.some((n) => n.key === tab)) setTab(activeModule === "opl" ? "opl_library" : currentUser.role);
+  }, [currentUser, tab, activeModule]);
+  const enterModule = (key) => {
+    setModuleKey(key);
+    setTab(key === "opl" ? "opl_library" : currentUser.role);
+  };
 
   if (!currentUser) {
     if (currentUserId && !usersReady) {
       return (
-        <div className="min-h-screen w-full flex items-center justify-center" style={{ background: NAVY_DEEP, color: "#9FB0C6", fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif" }}>
-          กำลังโหลดข้อมูลผู้ใช้...
-        </div>
+        <LangCtx.Provider value={{ lang, setLang, t }}>
+          <div className="min-h-screen w-full flex items-center justify-center" style={{ background: NAVY_DEEP, color: "#9FB0C6", fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif" }}>
+            {t("login.loadingUsers")}
+          </div>
+        </LangCtx.Provider>
       );
     }
     return (
-      <LoginScreen
-        users={users}
-        ready={usersReady}
-        onLogin={(user) => {
-          setCurrentUserId(user.id);
-          setTab(user.role); // ล็อกอินแล้วพาไปหน้าตามสิทธิ์ของตนเองก่อน
-        }}
-      />
+      <LangCtx.Provider value={{ lang, setLang, t }}>
+        <LoginScreen
+          users={users}
+          ready={usersReady}
+          onLogin={(user) => {
+            setCurrentUserId(user.id);
+            setModuleKey("gate"); // ล็อกอินแล้วเริ่มที่หน้า "สองประตู" (กรรมการเข้าหน้าให้คะแนนโดยตรง)
+            setTab(user.role); // ล็อกอินแล้วพาไปหน้าตามสิทธิ์ของตนเองก่อน
+          }}
+        />
+      </LangCtx.Provider>
     );
   }
 
@@ -5563,7 +7284,36 @@ export default function KaizenApp() {
   const adminQueue = kaizens.filter((k) => k.status === "pending_admin");
   const directorQueue = kaizens.filter((k) => k.status === "pending_director");
 
+  if (activeModule === "gate") {
+    const oplPublished = opls.filter((o) => o.status === "published").length;
+    const oplPending = currentUser.role === "admin" ? opls.filter((o) => o.status === "pending").length : opls.filter((o) => o.status === "pending" && (currentUser.departments || []).includes(o.department)).length;
+    const kaizenStat =
+      currentUser.role === "employee" ? t("gate.stat.kaizenEmployee", { n: myKaizens.length })
+      : currentUser.role === "supervisor" ? t("gate.stat.kaizenPending", { n: supervisorQueue.length })
+      : currentUser.role === "admin" ? t("gate.stat.kaizenReview", { n: adminQueue.length })
+      : t("gate.stat.kaizenPending", { n: directorQueue.length });
+    const oplStat =
+      currentUser.role === "employee" ? t("gate.stat.oplEmployee", { my: opls.filter(oplIsOwn).length, pub: oplPublished })
+      : currentUser.role === "supervisor" || currentUser.role === "admin" ? t("gate.stat.oplReview", { pending: oplPending, pub: oplPublished })
+      : t("gate.stat.oplOther", { pub: oplPublished });
+    return (
+      <LangCtx.Provider value={{ lang, setLang, t }}>
+        <SyncStatusBar />
+        <GatewayPage
+          currentUser={currentUser}
+          kaizenStat={kaizenStat}
+          oplStat={oplStat}
+          isAdmin={currentUser.role === "admin"}
+          onEnter={enterModule}
+          onUsers={() => { setModuleKey("kaizen"); setTab("users"); }}
+          onLogout={() => { setCurrentUserId(null); setTab("dashboard"); setModuleKey("gate"); setAwardDraft({}); }}
+        />
+      </LangCtx.Provider>
+    );
+  }
+
   return (
+    <LangCtx.Provider value={{ lang, setLang, t }}>
     <AwardCtx.Provider value={award}>
     <SyncStatusBar />
     <div className="min-h-screen w-full" style={{ background: SLATE, fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif" }}>
@@ -5575,8 +7325,8 @@ export default function KaizenApp() {
               <img src={COMPANY_LOGO} onError={useLogoFallback} alt="Company Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <div className="text-white font-semibold text-sm leading-tight">Kaizen System</div>
-              <div className="text-[11px] leading-tight" style={{ color: "#9FB0C6" }}>ระบบบริหารจัดการข้อเสนอ Kaizen & Suggestion</div>
+              <div className="text-white font-semibold text-sm leading-tight">{activeModule === "opl" ? "One Point Lesson" : "Kaizen"}</div>
+              <div className="text-[11px] leading-tight" style={{ color: "#9FB0C6" }}>{activeModule === "opl" ? t("header.oplSubtitle") : t("header.kaizenSubtitle")}</div>
             </div>
             <span
               className="text-[10px] px-2 py-0.5 rounded-full font-medium ml-1 whitespace-nowrap"
@@ -5601,7 +7351,18 @@ export default function KaizenApp() {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher lang={lang} setLang={setLang} variant="dark" />
             <div className="flex gap-1">
+              {currentUser.role !== "judge" && (
+                <button
+                  onClick={() => setModuleKey("gate")}
+                  title={t("header.homeTitle")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={{ color: GOLD, border: "1px solid #3A5078" }}
+                >
+                  <DoorOpen size={14} /> {t("header.home")}
+                </button>
+              )}
               {NAV.map((n) => {
                 const Icon = n.icon;
                 const active = tab === n.key;
@@ -5621,7 +7382,7 @@ export default function KaizenApp() {
             <div className="relative">
               <button
                 onClick={() => setShowNotifs((s) => !s)}
-                title="การแจ้งเตือน"
+                title={t("header.notifTitle")}
                 className="p-1.5 rounded-lg relative"
                 style={{ color: "#C7D2E0" }}
               >
@@ -5654,7 +7415,7 @@ export default function KaizenApp() {
               <div className="text-[10px]" style={{ color: "#9FB0C6" }}>{ROLE_LABEL[currentUser.role]}</div>
             </div>
             <button
-              onClick={() => { setCurrentUserId(null); setTab("dashboard"); setAwardDraft({}); }}
+              onClick={() => { setCurrentUserId(null); setTab("dashboard"); setModuleKey("gate"); setAwardDraft({}); }}
               title="ออกจากระบบ"
               className="p-1.5 rounded-lg"
               style={{ color: "#C7D2E0" }}
@@ -5666,11 +7427,20 @@ export default function KaizenApp() {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-6">
+        {activeModule === "opl" && tab === "opl_library" && (
+          <OplLibrary opls={opls} departments={departments} mode={oplMode} onOpen={(o) => setOplViewId(o.id)} />
+        )}
+        {activeModule === "opl" && tab === "opl_mine" && (
+          <OplMine rows={opls.filter(oplIsOwn)} canEditRow={oplCanAuthorEdit} onNew={openNewOpl} onOpen={(o) => setOplViewId(o.id)} onEdit={openEditOpl} mode={oplMode} />
+        )}
+        {activeModule === "opl" && tab === "opl_manage" && (
+          <OplManage rows={currentUser.role === "admin" ? opls : opls.filter((o) => (currentUser.departments || []).includes(o.department))} isAdmin={currentUser.role === "admin"} mode={oplMode} onOpen={(o) => setOplViewId(o.id)} onEdit={openEditOpl} onDelete={(o) => setOplDeleting(o)} />
+        )}
         {tab === "dashboard" && (
           <>
             <div className="mb-4">
-              <div className="text-lg font-semibold" style={{ color: INK }}>ภาพรวม Kaizen ทั้งโรงงาน</div>
-              <div className="text-sm" style={{ color: SUB }}>ติดตามสถานะ กรองข้อมูลตามหมวดหมู่ หน่วยงาน และสถานะแบบเรียลไทม์</div>
+              <div className="text-lg font-semibold" style={{ color: INK }}>{t("dash.title")}</div>
+              <div className="text-sm" style={{ color: SUB }}>{t("dash.subtitle")}</div>
             </div>
             <Dashboard data={kaizens} departments={departments} onView={(k) => setViewing(k)} onPresent={(k) => setPresenting(k)} />
           </>
@@ -5680,7 +7450,7 @@ export default function KaizenApp() {
           <>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className="text-lg font-semibold" style={{ color: INK }}>รายการ Kaizen ของฉัน</div>
+                <div className="text-lg font-semibold" style={{ color: INK }}>{t("page.employee.title")}</div>
                 <div className="text-sm" style={{ color: SUB }}>กรอกข้อเสนอ แนบภาพก่อน–หลัง และติดตามสถานะการอนุมัติ</div>
               </div>
               <button
@@ -5688,7 +7458,7 @@ export default function KaizenApp() {
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white"
                 style={{ background: NAVY }}
               >
-                <PlusCircle size={16} /> ส่งเรื่อง Kaizen ใหม่
+                <PlusCircle size={16} /> {t("page.newKaizen")}
               </button>
             </div>
             <Table
@@ -5712,7 +7482,7 @@ export default function KaizenApp() {
         {tab === "supervisor" && (
           <>
             <div className="mb-4">
-              <div className="text-lg font-semibold" style={{ color: INK }}>รอการอนุมัติจากหัวหน้างาน</div>
+              <div className="text-lg font-semibold" style={{ color: INK }}>{t("page.supervisor.title")}</div>
               <div className="text-sm" style={{ color: SUB }}>ตรวจสอบรายละเอียด อนุมัติ/ตีกลับ และเปิดนำเสนอให้ผู้บริหารได้ทันที</div>
             </div>
             <Table
@@ -5745,7 +7515,7 @@ export default function KaizenApp() {
           <>
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <div className="text-lg font-semibold" style={{ color: INK }}>ตรวจสอบและจัดหมวดหมู่ (Admin)</div>
+                <div className="text-lg font-semibold" style={{ color: INK }}>{t("page.admin.title")}</div>
                 <div className="text-sm" style={{ color: SUB }}>ตรวจสอบข้อมูลการลงทะเบียน กำหนดประเภท Kaizen และหมวดหมู่ QCDSME ก่อนส่งต่อผู้อำนวยการ</div>
               </div>
               <button
@@ -5815,7 +7585,7 @@ export default function KaizenApp() {
         {tab === "director" && (
           <>
             <div className="mb-4">
-              <div className="text-lg font-semibold" style={{ color: INK }}>รออนุมัติขั้นสุดท้าย (ผู้อำนวยการโรงงาน)</div>
+              <div className="text-lg font-semibold" style={{ color: INK }}>{t("page.director.title")}</div>
               <div className="text-sm" style={{ color: SUB }}>พิจารณาอนุมัติเรื่องที่ผ่านการตรวจสอบจาก Admin แล้ว</div>
             </div>
             <Table
@@ -5959,6 +7729,31 @@ export default function KaizenApp() {
         />
       )}
 
+      {oplForm && (
+        <Modal title={oplForm.initial.id ? t("opl.form.editTitle", { no: oplForm.initial.oplNo }) : t("opl.form.newTitle")} onClose={() => setOplForm(null)} wide>
+          <OplForm initial={oplForm.initial} mode={oplForm.mode} currentUser={currentUser} departments={departments} onSave={saveOplRecord} onClose={() => setOplForm(null)} />
+        </Modal>
+      )}
+      {oplViewId && opls.find((x) => x.id === oplViewId) && (() => {
+        const o = opls.find((x) => x.id === oplViewId);
+        return (
+          <OplDetail
+            key={o.id}
+            o={o}
+            departments={departments}
+            canEdit={oplIsEditor(o) || oplCanAuthorEdit(o)}
+            canReview={oplIsEditor(o)}
+            canDelete={currentUser.role === "admin"}
+            onEdit={openEditOpl}
+            onDelete={(x) => setOplDeleting(x)}
+            onReview={reviewOplRecord}
+            onAck={ackOplRecord}
+            onClose={() => setOplViewId(null)}
+          />
+        );
+      })()}
+      {oplDeleting && currentUser.role === "admin" && <OplDeleteModal key={oplDeleting.id} o={oplDeleting} onConfirm={deleteOplRecord} onClose={() => setOplDeleting(null)} />}
+
       {recalling && (
         <Modal title="ยืนยันการถอนเรื่อง" onClose={() => setRecalling(null)}>
           <div className="space-y-4">
@@ -5978,5 +7773,6 @@ export default function KaizenApp() {
       )}
     </div>
     </AwardCtx.Provider>
+    </LangCtx.Provider>
   );
 }
