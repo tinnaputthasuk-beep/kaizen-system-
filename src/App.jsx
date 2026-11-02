@@ -22,6 +22,18 @@ const useLogoFallback = (e) => {
 };
 
 const APP_NAME = "Food Solutions - Improvement System";
+const TDC_SECTION = "TDC 1.0";
+const isTDC = (dept) => (SECTION_MAP[dept] || "") === TDC_SECTION;
+const SITE_TABS = [
+  { key: "all", label: "ทั้ง 2 โรงงาน", labelEn: "Both Sites", labelMm: "စက်ရုံ ၂ ခုလုံး" },
+  { key: "bl", label: "BL (บางเลน)", labelEn: "BL (Banglane)", labelMm: "BL (Banglane)" },
+  { key: "tdc", label: "TDC 1.0 (ระยอง)", labelEn: "TDC 1.0 (Rayong)", labelMm: "TDC 1.0 (Rayong)" },
+];
+function siteFilter(list, site) {
+  if (site === "bl") return list.filter((k) => !isTDC(k.department));
+  if (site === "tdc") return list.filter((k) => isTDC(k.department));
+  return list;
+}
 // ======================================================================
 // ระบบสลับภาษา (ไทย / English / မြန်မာ) — ครอบคลุม: Login, หน้าสองประตู, เมนู, หัวข้อหน้า,
 // สถานะ Kaizen/OPL, ฟอร์มส่ง Kaizen, ตาราง/ปุ่มคำสั่งที่ใช้ร่วมกัน, Dashboard (หัวข้อ+การ์ด),
@@ -159,7 +171,7 @@ const I18N = {
   "kform.saveDraft": "บันทึกแบบร่าง",
   "kform.submit": "ส่งเรื่อง",
   "kform.saveEdit": "บันทึกการแก้ไข",
-  "dash.title": "ภาพรวม Kaizen ทั้งโรงงาน",
+  "dash.title": "ภาพรวม Kaizen : Food Solutions",
   "dash.subtitle": "ติดตามสถานะ กรองข้อมูลตามหมวดหมู่ หน่วยงาน และสถานะแบบเรียลไทม์",
   "dash.kpiTotal": "Kaizen รวมทั้งหมด",
   "dash.kpiCostSaving": "มูลค่า Cost Saving",
@@ -388,7 +400,7 @@ const I18N = {
   "kform.saveDraft": "Save as draft",
   "kform.submit": "Submit",
   "kform.saveEdit": "Save changes",
-  "dash.title": "Factory-wide Kaizen Overview",
+  "dash.title": "Kaizen Overview : Food Solutions",
   "dash.subtitle": "Track status, filter by category, department, and status in real time",
   "dash.kpiTotal": "Total Kaizen",
   "dash.kpiCostSaving": "Cost Saving Value",
@@ -913,6 +925,17 @@ const DEFAULT_DEPARTMENTS = [
   "ER & Admin",
   "Accounting",
   "Procurement",
+  "TDC 1.0 - Production",
+  "TDC 1.0 - R&D",
+  "TDC 1.0 - QA&QC",
+  "TDC 1.0 - Warehouse",
+  "TDC 1.0 - Store",
+  "TDC 1.0 - Root Receive",
+  "TDC 1.0 - Engineering",
+  "TDC 1.0 - Utility&SHE",
+  "TDC 1.0 - HR & Admin",
+  "TDC 1.0 - Accounting",
+  "TDC 1.0 - Purchasing",
 ];
 
 // ---------- ทะเบียนผู้ใช้ ----------
@@ -957,6 +980,20 @@ const DEFAULT_USERS = [
   { id: "u33", name: "C & B", role: "employee", departments: ["C & B"], aliases: [], active: true, pw: { s: "f854025d869d846d2e767a2731a5b599", h: "5af510031ac282c2ebbb3364fb13754da4d1effa54a66880fef24de4dd4d75bc" } },
   { id: "u34", name: "Recruitment & Training", role: "employee", departments: ["Recruitment & Training"], aliases: [], active: true, pw: { s: "11e6fb7e46adafed8f39f56347c1592f", h: "03fe32a40160fcd501d61be03ffd5b95dcf955430191822403cb2407fdab64bf" } },
   { id: "u35", name: "ER & Admin", role: "employee", departments: ["ER & Admin"], aliases: [], active: true, pw: { s: "db5ff6c83eb52a7e0ba831bba3e54951", h: "060d60f91357bb469dd86b0134f24772e4e0194537ce92b35d211293375afdc5" } },
+
+  // ---- TDC 1.0 (Rayong) ----
+  { id: "u43", name: "ปาริชาติ", role: "supervisor", departments: ["TDC 1.0 - Production", "TDC 1.0 - R&D", "TDC 1.0 - QA&QC", "TDC 1.0 - Warehouse", "TDC 1.0 - Store", "TDC 1.0 - Root Receive", "TDC 1.0 - Engineering", "TDC 1.0 - Utility&SHE", "TDC 1.0 - HR & Admin", "TDC 1.0 - Accounting", "TDC 1.0 - Purchasing"], aliases: [], active: true, pw: { s: "c7cc75eaa7c26878b1f4e3d9ad9eec52", h: "105211cc4dd4145b51647dd0f083ca686e848d178b2c7251447c1651d931574e" } },
+  { id: "u44", name: "TDC 1.0 - Production", role: "employee", departments: ["TDC 1.0 - Production"], aliases: [], active: true, pw: { s: "d65bb815c819bc6342f5cd712e3cf61f", h: "b9326cee8c0a2dc0e4666c38f365ced7ac689bcd3bf1ab9eb73719ce25274347" } },
+  { id: "u45", name: "TDC 1.0 - R&D", role: "employee", departments: ["TDC 1.0 - R&D"], aliases: [], active: true, pw: { s: "71cdc540ea9fcaae978290326bcc5269", h: "9255c68fc528350bfd2a72fd7edbbbe372c28da4c4be63e18900288802ca47d4" } },
+  { id: "u46", name: "TDC 1.0 - QA&QC", role: "employee", departments: ["TDC 1.0 - QA&QC"], aliases: [], active: true, pw: { s: "ac5727cae848771a6c52729cfef800da", h: "ca36245ac3994c0977c56c63c1a6085c109dbc8e8a86dca51c1121295150b7ee" } },
+  { id: "u47", name: "TDC 1.0 - Warehouse", role: "employee", departments: ["TDC 1.0 - Warehouse"], aliases: [], active: true, pw: { s: "57813ec7ff198c6f1edcbb792547da25", h: "8e82c93189b8cabb40917b36c4972dca90ed84d49ec045c2d39b916d30c83fa1" } },
+  { id: "u48", name: "TDC 1.0 - Store", role: "employee", departments: ["TDC 1.0 - Store"], aliases: [], active: true, pw: { s: "8a536195e4d866f7d1a82b49901d24b1", h: "feb80470a51177ff3041851b8724769c9af820b0f977fb0d9273f99c903d7b33" } },
+  { id: "u49", name: "TDC 1.0 - Root Receive", role: "employee", departments: ["TDC 1.0 - Root Receive"], aliases: [], active: true, pw: { s: "c995bc9871ccc1bcee7d4b5fd246326e", h: "e99cf1d83bf6f6321ba76b5d6aedc66640bcf939187b4a523fbb9e2d399a4259" } },
+  { id: "u50", name: "TDC 1.0 - Engineering", role: "employee", departments: ["TDC 1.0 - Engineering"], aliases: [], active: true, pw: { s: "c79799698ff445e2efae62fd869fa6f9", h: "df701e92276ce073c381fb40893d0e8b47ed0d075fce5b13470259aa83ace4ee" } },
+  { id: "u51", name: "TDC 1.0 - Utility&SHE", role: "employee", departments: ["TDC 1.0 - Utility&SHE"], aliases: [], active: true, pw: { s: "366ac1bcde08f7528cba522b262a8cc6", h: "36bee172c5398aa8243c6b9540506105e7296f5bcb84ef5dc088f0f2404aebed" } },
+  { id: "u52", name: "TDC 1.0 - HR & Admin", role: "employee", departments: ["TDC 1.0 - HR & Admin"], aliases: [], active: true, pw: { s: "cbc7c8c3f273f030a5fa756e666b79fe", h: "b0c2d3eb079b5969282b44e23a2dca4fb3116dfd7edc8ebfa06ec3b5d15aaf05" } },
+  { id: "u53", name: "TDC 1.0 - Accounting", role: "employee", departments: ["TDC 1.0 - Accounting"], aliases: [], active: true, pw: { s: "d662e8b4ef7ebc06466363cb476687ef", h: "a8ced1009e94c7e4385b59074f1d27cec9d802613069acf2074673152d4b8ebe" } },
+  { id: "u54", name: "TDC 1.0 - Purchasing", role: "employee", departments: ["TDC 1.0 - Purchasing"], aliases: [], active: true, pw: { s: "c0620d61a6c762eb86a0103512f97a59", h: "2b914a99a7bcfe177eea6f185f4fe93a82ae2b926c3b43c2e66618858834931b" } },
   { id: "u36", name: "กรรมการ 1", role: "judge", departments: [], aliases: [], active: true, pw: { s: "dd35b6aae8872510298215bf52bc7d4d", h: "9f560ea13927eec82318e4a70aa10cac09653d854d3f77c96047f13fe1f58dac" } },
   { id: "u37", name: "กรรมการ 2", role: "judge", departments: [], aliases: [], active: true, pw: { s: "d58b20452b8b853ae2e5116e5ddc6a55", h: "7329bfbcdbd161c060eae62805c3541d7c9b492f4c82450823686f2504cbe5e7" } },
   { id: "u38", name: "กรรมการ 3", role: "judge", departments: [], aliases: [], active: true, pw: { s: "b535e3398e15b90e555c8f5cca9aa67e", h: "37a102a5d2f80c97cfdc31e02ed4daa71a91b8ddd3cd24f483b17543d0a411ab" } },
@@ -1046,6 +1083,7 @@ const SECTION_OPTIONS = [
   "SHE",
   "HRBP",
   "Support Function",
+  "TDC 1.0",
 ];
 const SECTION_MAP = {
   "Production Planning & Data": "Production Planning & Data",
@@ -1088,6 +1126,17 @@ const SECTION_MAP = {
   "ER & Admin": "HRBP",
   "Accounting": "Support Function",
   "Procurement": "Support Function",
+  "TDC 1.0 - Production": "TDC 1.0",
+  "TDC 1.0 - R&D": "TDC 1.0",
+  "TDC 1.0 - QA&QC": "TDC 1.0",
+  "TDC 1.0 - Warehouse": "TDC 1.0",
+  "TDC 1.0 - Store": "TDC 1.0",
+  "TDC 1.0 - Root Receive": "TDC 1.0",
+  "TDC 1.0 - Engineering": "TDC 1.0",
+  "TDC 1.0 - Utility&SHE": "TDC 1.0",
+  "TDC 1.0 - HR & Admin": "TDC 1.0",
+  "TDC 1.0 - Accounting": "TDC 1.0",
+  "TDC 1.0 - Purchasing": "TDC 1.0",
 };
 
 // รายชื่อหน่วยงานที่ Admin เพิ่ม/แก้/ลบเอง: เก็บในชีต KaizenUsers เป็นแถวพิเศษ id "__config" (ใช้ Code.gs ตัวเดิมได้ ไม่ต้องแก้)
@@ -1631,7 +1680,7 @@ function MultiSelectFilter({ label, options, selected, onSelected, query, onQuer
 }
 
 const EMPTY_FILTERS = {
-  no: { q: "", sel: [] }, title: { q: "", sel: [] }, dept: { q: "", sel: [] }, cat: { q: "", sel: [] }, status: { q: "", sel: [] },
+  no: { q: "", sel: [] }, title: { q: "", sel: [] }, section: { q: "", sel: [] }, dept: { q: "", sel: [] }, cat: { q: "", sel: [] }, status: { q: "", sel: [] },
 };
 
 function useKaizenFilters(rows) {
@@ -1651,6 +1700,8 @@ function useKaizenFilters(rows) {
         if (f.no.sel.length && !f.no.sel.includes(k.registeredNo)) return false;
         if (!textOk(f.title.q, k.title)) return false;
         if (f.title.sel.length && !f.title.sel.includes(k.title)) return false;
+        if (f.section.sel.length && !f.section.sel.includes(SECTION_MAP[k.department])) return false;
+        if (!textOk(f.section.q, SECTION_MAP[k.department] || "")) return false;
         if (!textOk(f.dept.q, k.department)) return false;
         if (f.dept.sel.length && !f.dept.sel.includes(k.department)) return false;
         if (f.cat.sel.length && !f.cat.sel.some((c) => (c === "__none" ? cats.length === 0 : cats.includes(c)))) return false;
@@ -1664,11 +1715,17 @@ function useKaizenFilters(rows) {
     () => ({
       no: [...rows].sort((a, b) => String(b.registeredNo).localeCompare(String(a.registeredNo))).map((k) => ({ value: k.registeredNo, label: `${k.registeredNo} · ${k.date}` })),
       title: Array.from(new Set(rows.map((k) => k.title))).sort().map((t) => ({ value: t, label: t })),
-      dept: Array.from(new Set(rows.map((k) => k.department))).sort().map((d) => ({ value: d, label: d })),
+      section: SECTION_OPTIONS.map((sec) => ({ value: sec, label: sec })),
+      dept: (() => {
+        const allDepts = Array.from(new Set([...DEFAULT_DEPARTMENTS, ...rows.map((k) => k.department)])).sort();
+        const activeSections = f.section.sel;
+        if (activeSections.length === 0) return allDepts.map((d) => ({ value: d, label: d }));
+        return allDepts.filter((d) => activeSections.includes(SECTION_MAP[d])).map((d) => ({ value: d, label: d }));
+      })(),
       cat: [...CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })), { value: "__none", label: "ยังไม่จัดหมวด" }],
       status: Object.entries(STATUS_META).map(([key, v]) => ({ value: key, label: v.label })),
     }),
-    [rows]
+    [rows, f.section.sel]
   );
   const active = Object.values(f).some((p) => p.q.trim() || p.sel.length);
   return { part, filtered, options, active, clear: () => setF(EMPTY_FILTERS) };
@@ -1677,7 +1734,7 @@ function useKaizenFilters(rows) {
 function RowFilterBar({ flt, total, dark }) {
   const { t } = useI18n();
   const items = [
-    ["no", t("table.no"), "left"], ["title", t("table.title"), "left"], ["dept", t("table.dept"), "left"], ["cat", t("table.category"), "right"], ["status", t("table.status"), "right"],
+    ["no", t("table.no"), "left"], ["title", t("table.title"), "left"], ["section", "ฝ่าย (Section)", "left"], ["dept", t("table.dept"), "left"], ["cat", t("table.category"), "right"], ["status", t("table.status"), "right"],
   ];
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -2811,12 +2868,26 @@ function PresentationView({ k }) {
           </div>
         </div>
 
-        {k.categories && k.categories.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs" style={{ color: SUB }}>หมวดหมู่:</span>
-            <CategoryTags categories={k.categories} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs" style={{ color: SUB }}>หมวดหมู่:</span>
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORY_OPTIONS.map((c) => {
+              const active = (k.categories || []).includes(c);
+              return (
+                <span
+                  key={c}
+                  className="text-[11px] px-2.5 py-1 rounded-full border font-medium"
+                  style={active
+                    ? { background: NAVY, borderColor: NAVY, color: "white", boxShadow: "0 1px 4px rgba(18,41,75,0.35)" }
+                    : { borderColor: "#D0D5DD", color: "#6B7280", background: "#F3F4F6" }
+                  }
+                >
+                  {c}
+                </span>
+              );
+            })}
           </div>
-        )}
+        </div>
       </div>
     </div>
     </div>
@@ -3170,8 +3241,120 @@ function FilterableKaizenTable({ rows, onRowClick, onPresent }) {
   );
 }
 
+// กรอบกราฟ: มี tab เลือกโรงงาน ในแต่ละกราฟ + hover เน้นกรอบ + กดขยายเต็มจอ + สั่งพิมพ์ A4 แนวนอน
+function ChartCard({ title, subtitle, children, counted, renderChart, id }) {
+  const [cardSite, setCardSite] = useState("all");
+  const [hover, setHover] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const expandRef = useRef(null);
+  const filteredData = useMemo(() => {
+    if (!counted) return null;
+    if (cardSite === "bl") return counted.filter((k) => !isTDC(k.department));
+    if (cardSite === "tdc") return counted.filter((k) => isTDC(k.department));
+    return counted;
+  }, [counted, cardSite]);
+  const printA4 = () => {
+    const node = expandRef.current || document.getElementById("chart-expand-body");
+    if (!node) return;
+    printPoster(node, title || "chart");
+  };
+  const tabs = [
+    { key: "all", label: "ทั้งหมด" },
+    { key: "bl", label: "BL" },
+    { key: "tdc", label: "TDC" },
+  ];
+  const SiteTabs = ({ size = "sm" }) => (
+    <div className="flex items-center gap-1">
+      {tabs.map((t) => (
+        <button key={t.key} type="button" onClick={() => setCardSite(t.key)} className={`rounded border font-medium ${size === "lg" ? "text-xs px-3 py-1" : "text-[10px] px-2 py-0.5"}`} style={cardSite === t.key ? { background: NAVY, borderColor: NAVY, color: "white" } : { borderColor: "#D8DDE5", color: "#8A9AB0" }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+  const chartContent = renderChart ? renderChart(filteredData) : children;
+  return (
+    <>
+      <div
+        className="rounded-xl border p-4 transition-all cursor-pointer"
+        style={{ borderColor: hover ? NAVY : "#D8DDE5", boxShadow: hover ? "0 4px 16px rgba(18,41,75,0.18)" : "none", background: "white" }}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onClick={() => setExpanded(true)}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            {title && <div className="text-sm font-medium" style={{ color: NAVY }}>{title}</div>}
+            {subtitle && <div className="text-[11px]" style={{ color: "#8A9AB0" }}>{subtitle}</div>}
+          </div>
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <SiteTabs />
+            {hover && (
+              <button onClick={() => setExpanded(true)} title="ขยายดูภาพใหญ่" className="ml-1 p-1 rounded border" style={{ borderColor: "#D8DDE5", color: "#1D5FC9" }}>
+                <ZoomIn size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+        {chartContent}
+      </div>
+      {expanded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setExpanded(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[95vw] max-w-[1100px]" style={{ maxHeight: "90vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 pt-5 pb-2">
+              <div>
+                {title && <div className="text-lg font-semibold" style={{ color: NAVY }}>{title}</div>}
+                {subtitle && <div className="text-sm" style={{ color: SUB }}>{subtitle}</div>}
+              </div>
+              <div className="flex items-center gap-2">
+                <SiteTabs size="lg" />
+                <button onClick={printA4} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: NAVY, color: NAVY }}>
+                  <Printer size={14} /> พิมพ์ A4 แนวนอน
+                </button>
+                <button onClick={() => setExpanded(false)} className="p-1.5 rounded-lg" style={{ color: SUB }}><X size={18} /></button>
+              </div>
+            </div>
+            <div ref={expandRef} id="chart-expand-body" className="px-6 pb-6 pt-2" style={{ background: "white" }}>
+              <div style={{ height: 420 }}>
+                {renderChart ? renderChart(filteredData) : children}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function KpiCard({ children, style, className = "" }) {
+  const [hover, setHover] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <div
+        className={`rounded-xl p-4 transition-all cursor-pointer ${className}`}
+        style={{ ...style, boxShadow: hover ? "0 4px 16px rgba(18,41,75,0.22)" : "none", transform: hover ? "translateY(-2px)" : "none" }}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onClick={() => setExpanded(true)}
+      >
+        {children}
+      </div>
+      {expanded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }} onClick={() => setExpanded(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-8" style={{ minWidth: 360, transform: "scale(1.5)", transformOrigin: "center" }} onClick={(e) => e.stopPropagation()}>
+            {children}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Dashboard({ data, departments, onView, onPresent }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
+  const [site, setSite] = useState("all");
+  const siteData = useMemo(() => siteFilter(data, site), [data, site]);
   // ตัวกรองทุกตัวเลือกได้หลายค่า (ว่าง = ทุกค่า) · เลือกหลายค่าในตัวกรองเดียวกัน = "หรือ" · ต่างตัวกรอง = "และ"
   const [yearFilter, setYearFilter] = useState([]);
   const [monthFilter, setMonthFilter] = useState([]);
@@ -3185,14 +3368,24 @@ function Dashboard({ data, departments, onView, onPresent }) {
     setYearFilter([]); setMonthFilter([]); setSectionFilter([]); setDeptFilter([]); setCatFilter([]); setActivityFilter([]); setKaizenTypeFilter([]);
   };
 
-  const yearOptions = useMemo(() => Array.from(new Set(data.map((k) => k.date.slice(0, 4)))).sort().reverse(), [data]);
+  const yearOptions = useMemo(() => Array.from(new Set(siteData.map((k) => k.date.slice(0, 4)))).sort().reverse(), [siteData]);
 
   // เมื่อเลือกฝ่ายแล้ว รายการหน่วยงานใน Unit จะกรองให้เหลือเฉพาะหน่วยงานในฝ่ายนั้น
-  const unitOptions = useMemo(() => {
+  const siteFilteredDepts = useMemo(() => {
     const all = departments && departments.length ? departments : DEFAULT_DEPARTMENTS;
-    if (sectionFilter.length === 0) return all;
-    return all.filter((d) => sectionFilter.includes(SECTION_MAP[d]));
-  }, [departments, sectionFilter]);
+    if (site === "bl") return all.filter((d) => !isTDC(d));
+    if (site === "tdc") return all.filter((d) => isTDC(d));
+    return all;
+  }, [departments, site]);
+  const siteSections = useMemo(() => {
+    if (site === "bl") return SECTION_OPTIONS.filter((s) => s !== TDC_SECTION);
+    if (site === "tdc") return [TDC_SECTION];
+    return SECTION_OPTIONS;
+  }, [site]);
+  const unitOptions = useMemo(() => {
+    if (sectionFilter.length === 0) return siteFilteredDepts;
+    return siteFilteredDepts.filter((d) => sectionFilter.includes(SECTION_MAP[d]));
+  }, [siteFilteredDepts, sectionFilter]);
 
   // เปลี่ยนฝ่ายแล้ว หน่วยงานที่เลือกไว้แต่ไม่อยู่ในฝ่ายที่เลือก จะถูกเอาออกให้อัตโนมัติ
   const handleSectionChange = (vals) => {
@@ -3200,7 +3393,7 @@ function Dashboard({ data, departments, onView, onPresent }) {
     if (vals.length > 0) setDeptFilter((prev) => prev.filter((d) => vals.includes(SECTION_MAP[d])));
   };
 
-  const filtered = sortNewestFirst(data.filter((k) => {
+  const filtered = sortNewestFirst(siteData.filter((k) => {
     const y = k.date.slice(0, 4);
     const m = k.date.slice(5, 7);
     const has = (list, v) => list.length === 0 || list.includes(v);
@@ -3259,6 +3452,16 @@ function Dashboard({ data, departments, onView, onPresent }) {
   const crossFunctionalCount = counted.filter((k) => k.kaizenType === "Cross functional Kaizen").length;
   const totalCostSaving = counted.reduce((sum, k) => sum + (parseFloat(k.costSaving) || 0), 0);
   const excludedCount = filtered.length - counted.length;
+  const blCounted = counted.filter((k) => !isTDC(k.department));
+  const tdcCounted = counted.filter((k) => isTDC(k.department));
+  const blTotal = blCounted.length;
+  const tdcTotal = tdcCounted.length;
+  const blCostSaving = blCounted.reduce((s, k) => s + (parseFloat(k.costSaving) || 0), 0);
+  const tdcCostSaving = tdcCounted.reduce((s, k) => s + (parseFloat(k.costSaving) || 0), 0);
+  const blProject = blCounted.filter((k) => k.kaizenType === "Kaizen Project").length;
+  const tdcProject = tdcCounted.filter((k) => k.kaizenType === "Kaizen Project").length;
+  const blCross = blCounted.filter((k) => k.kaizenType === "Cross functional Kaizen").length;
+  const tdcCross = tdcCounted.filter((k) => k.kaizenType === "Cross functional Kaizen").length;
 
   // จำนวนตามประเภทข้อมูล (หมวด QCDSME) — 1 เรื่องนับได้หลายหมวด
   const countByCategory = useMemo(() => {
@@ -3274,6 +3477,14 @@ function Dashboard({ data, departments, onView, onPresent }) {
   }, [counted]);
 
   const selectCls = "text-sm rounded-lg border px-2.5 py-1.5";
+
+  const SiteSub = ({ bl, tdc }) => site !== "all" ? null : (
+    <div className="flex gap-2 mt-1 text-[10px]" style={{ opacity: 0.75 }}>
+      <span>BL: <strong>{typeof bl === "number" && bl > 999 ? bl.toLocaleString() : bl}</strong></span>
+      <span>·</span>
+      <span>TDC: <strong>{typeof tdc === "number" && tdc > 999 ? tdc.toLocaleString() : tdc}</strong></span>
+    </div>
+  );
 
   const handleExport = () => {
     const rows = filtered.map((k) => ({
@@ -3304,12 +3515,22 @@ function Dashboard({ data, departments, onView, onPresent }) {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center gap-1.5 mb-1">
+        {SITE_TABS.map(({ key, label, labelEn, labelMm }) => {
+          const lbl = lang === "en" ? labelEn : lang === "mm" ? labelMm : label;
+          return (
+            <button key={key} type="button" onClick={() => setSite(key)} className="text-sm px-4 py-2 rounded-lg font-semibold" style={site === key ? { background: NAVY, color: "white" } : { background: "#EEF0F3", color: SUB }}>
+              {lbl}
+            </button>
+          );
+        })}
+      </div>
       <div className="rounded-2xl p-4" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
         <div className="flex flex-wrap gap-2.5 items-center">
           <div className="flex items-center gap-1.5 text-xs font-medium text-white/90 pr-1"><Filter size={14} /> ตัวกรอง</div>
           <MultiSelectFilter dark label="ปี" allLabel="ทุกปี" showSearch={false} queryIsFilter={false} options={yearOptions.map((y) => ({ value: y, label: y }))} selected={yearFilter} onSelected={setYearFilter} />
           <MultiSelectFilter dark label="เดือน" allLabel="ทุกเดือน" showSearch={false} queryIsFilter={false} options={THAI_MONTHS.map((m, i) => ({ value: String(i + 1).padStart(2, "0"), label: m }))} selected={monthFilter} onSelected={setMonthFilter} />
-          <MultiSelectFilter dark label="ฝ่าย" allLabel="ทุกฝ่าย (Section)" showSearch={false} queryIsFilter={false} options={SECTION_OPTIONS.map((x) => ({ value: x, label: x }))} selected={sectionFilter} onSelected={handleSectionChange} />
+          <MultiSelectFilter dark label="ฝ่าย" allLabel="ทุกฝ่าย (Section)" showSearch={false} queryIsFilter={false} options={siteSections.map((x) => ({ value: x, label: x }))} selected={sectionFilter} onSelected={handleSectionChange} />
           <MultiSelectFilter dark label="หน่วยงาน" allLabel="ทุกหน่วยงาน (Unit)" queryIsFilter={false} options={unitOptions.map((d) => ({ value: d, label: d }))} selected={deptFilter} onSelected={setDeptFilter} />
           <MultiSelectFilter dark align="right" label="ประเภทข้อมูล" allLabel="ทุกประเภทข้อมูล" showSearch={false} queryIsFilter={false} options={[...CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })), { value: "__none", label: "ยังไม่จัดหมวด" }]} selected={catFilter} onSelected={setCatFilter} />
           <MultiSelectFilter dark align="right" label="ประเภทกิจกรรม" allLabel="ทุกประเภทกิจกรรม" showSearch={false} queryIsFilter={false} options={ACTIVITY_OPTIONS.map((o) => ({ value: o, label: o }))} selected={activityFilter} onSelected={setActivityFilter} />
@@ -3336,21 +3557,24 @@ function Dashboard({ data, departments, onView, onPresent }) {
         {excludedCount > 0 && <> · ตามตัวกรองนี้มี {excludedCount} เรื่องที่ยังไม่ถูกนับ (แสดงในตารางด้านล่าง)</>}
       </div>
       <div className="grid grid-cols-4 gap-4">
-        <div className="rounded-xl p-4 text-white" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
+        <KpiCard className="text-white" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
           <div className="text-xs font-medium text-white/80">{t("dash.kpiTotal")}</div>
           <div className="text-3xl font-semibold mt-1.5">{total}</div>
           <div className="text-xs mt-1 text-white/70">{t("dash.kpiTotalSub")}</div>
-        </div>
-        <div className="rounded-xl p-4" style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
+          <SiteSub bl={blTotal} tdc={tdcTotal} />
+        </KpiCard>
+        <KpiCard style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
           <div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiProject")}</div>
           <div className="text-3xl font-semibold mt-1.5" style={{ color: DB_DEEP }}>{kaizenProjectCount}</div>
           <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>{t("dash.kpiProjectSub")}</div>
-        </div>
-        <div className="rounded-xl p-4" style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
+          <SiteSub bl={blProject} tdc={tdcProject} />
+        </KpiCard>
+        <KpiCard style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
           <div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiCross")}</div>
           <div className="text-3xl font-semibold mt-1.5" style={{ color: DB_DEEP }}>{crossFunctionalCount}</div>
           <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>{t("dash.kpiCrossSub")}</div>
-        </div>
+          <SiteSub bl={blCross} tdc={tdcCross} />
+        </KpiCard>
         <div
           className="relative rounded-xl p-4 overflow-hidden"
           style={{
@@ -3373,80 +3597,42 @@ function Dashboard({ data, departments, onView, onPresent }) {
             {totalCostSaving.toLocaleString()}
           </div>
           <div className="text-xs mt-1 text-white/85 font-medium relative">{t("dash.kpiCostSavingSub")}</div>
+          <SiteSub bl={blCostSaving.toLocaleString()} tdc={tdcCostSaving.toLocaleString()} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl border p-4" style={{ borderColor: DB_BORDER }}>
-          <div className="text-sm font-medium mb-3" style={{ color: DB_DEEP }}>Cost Saving ตามฝ่าย/Section (บาท/ปี)</div>
-          <ResponsiveContainer width="100%" height={230}>
-            <BarChart data={costSavingBySection}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v) => `${Number(v).toLocaleString()} บาท`} />
-              <Bar dataKey="value" fill={DB_BLUE} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="rounded-xl border p-4" style={{ borderColor: DB_BORDER }}>
-          <div className="text-sm font-medium mb-3" style={{ color: DB_DEEP }}>จำนวน Kaizen ตามฝ่าย/Section</div>
-          <ResponsiveContainer width="100%" height={230}>
-            <BarChart data={countBySection}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="count" fill={DB_BLUE2} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <ChartCard title="Cost Saving ตามฝ่าย/Section (บาท/ปี)" counted={counted} renderChart={(d) => {
+          const m = {}; d.forEach((k) => { const v = parseFloat(k.costSaving) || 0; const sec = SECTION_MAP[k.department] || "อื่นๆ"; if (v > 0) m[sec] = (m[sec] || 0) + v; });
+          const chartData = Object.entries(m).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
+          return <ResponsiveContainer width="100%" height={230}><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip formatter={(v) => `${Number(v).toLocaleString()} บาท`} /><Bar dataKey="value" fill={DB_BLUE} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>;
+        }} />
+        <ChartCard title="จำนวน Kaizen ตามฝ่าย/Section" counted={counted} renderChart={(d) => {
+          const m = {}; d.forEach((k) => { const sec = SECTION_MAP[k.department] || "อื่นๆ"; m[sec] = (m[sec] || 0) + 1; });
+          const chartData = Object.entries(m).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+          return <ResponsiveContainer width="100%" height={230}><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="count" fill={DB_BLUE2} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>;
+        }} />
       </div>
 
-      <div className="rounded-xl border p-4" style={{ borderColor: DB_BORDER }}>
-        <div className="text-sm font-medium" style={{ color: DB_DEEP }}>จำนวน Kaizen ตามประเภทข้อมูล (Cost, Safety, Quality และอื่นๆ)</div>
-        <div className="text-[11px] mb-3" style={{ color: "#8A9AB0" }}>1 เรื่องนับได้หลายประเภท ถ้า Admin จัดไว้หลายหมวด · "ยังไม่จัดหมวด" คือเรื่องที่ Admin ยังไม่ได้ตรวจและจัดหมวดหมู่</div>
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={countByCategory} margin={{ top: 18 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" />
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v) => `${v} เรื่อง`} />
-            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-              {countByCategory.map((row, i) => (
-                <Cell key={row.name} fill={row.name === "ยังไม่จัดหมวด" ? "#B8C2D0" : ["#1D5FC9", "#3F8FE0", "#2F7D5C", "#D99A2B", "#B23A2E", "#7A5AE0", "#D9577E", "#2BA3B8", "#8A6D3B", "#5B6675"][i % 10]} />
-              ))}
-              <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: DB_DEEP, fontWeight: 600 }} />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <ChartCard title="จำนวน Kaizen ตามประเภทข้อมูล (Cost, Safety, Quality และอื่นๆ)" subtitle='1 เรื่องนับได้หลายประเภท ถ้า Admin จัดไว้หลายหมวด · "ยังไม่จัดหมวด" คือเรื่องที่ Admin ยังไม่ได้ตรวจและจัดหมวดหมู่' counted={counted} renderChart={(d) => {
+        const m = Object.fromEntries(CATEGORY_OPTIONS.map((c) => [c, 0])); let none = 0;
+        d.forEach((k) => { if (!(k.categories || []).length) none += 1; (k.categories || []).forEach((c) => { m[c] = (m[c] || 0) + 1; }); });
+        const chartData = [...CATEGORY_OPTIONS.map((c) => ({ name: c, count: m[c] })), { name: "ยังไม่จัดหมวด", count: none }];
+        const colors = ["#1D5FC9", "#3F8FE0", "#2F7D5C", "#D99A2B", "#B23A2E", "#7A5AE0", "#D9577E", "#2BA3B8", "#8A6D3B", "#5B6675", "#B8C2D0"];
+        return <ResponsiveContainer width="100%" height={250}><BarChart data={chartData} margin={{ top: 18 }}><CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" /><XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip formatter={(v) => `${v} เรื่อง`} /><Bar dataKey="count" radius={[4, 4, 0, 0]}>{chartData.map((row, i) => <Cell key={row.name} fill={colors[i % colors.length]} />)}<LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: "#0B1D33", fontWeight: 600 }} /></Bar></BarChart></ResponsiveContainer>;
+      }} />
 
-      <div className="rounded-xl border p-4" style={{ borderColor: DB_BORDER }}>
-        <div className="text-sm font-medium mb-3" style={{ color: DB_DEEP }}>จำนวน Kaizen ของแต่ละหน่วยงาน (Unit)</div>
-        <ResponsiveContainer width="100%" height={230}>
-          <BarChart data={countByDept}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" />
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Bar dataKey="count" fill={DB_BLUE2} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <ChartCard title="จำนวน Kaizen ของแต่ละหน่วยงาน (Unit)" counted={counted} renderChart={(d) => {
+        const m = {}; d.forEach((k) => (m[k.department] = (m[k.department] || 0) + 1));
+        const chartData = Object.entries(m).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+        return <ResponsiveContainer width="100%" height={230}><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="count" fill={DB_BLUE2} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>;
+      }} />
 
-      <div className="rounded-xl border p-4" style={{ borderColor: DB_BORDER }}>
-        <div className="text-sm font-medium mb-3 flex items-center gap-1.5" style={{ color: DB_DEEP }}><TrendingUp size={15} /> จำนวนการส่ง Kaizen รายเดือน</div>
-        <ResponsiveContainer width="100%" height={230}>
-          <BarChart data={byMonth}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" />
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Bar dataKey="count" fill={DB_DEEP} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <ChartCard title="จำนวนการส่ง Kaizen รายเดือน" counted={counted} renderChart={(d) => {
+        const m = {}; d.forEach((k) => { const key = k.date.slice(0, 7); m[key] = (m[key] || 0) + 1; });
+        const chartData = Object.entries(m).sort().map(([key, count]) => { const [y, mo] = key.split("-"); return { name: `${THAI_MONTHS[parseInt(mo, 10) - 1]} ${y.slice(2)}`, count }; });
+        return <ResponsiveContainer width="100%" height={230}><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#EEF3FA" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="count" fill="#0B1D33" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>;
+      }} />
 
       <FilterableKaizenTable rows={filtered} onRowClick={onView} onPresent={onPresent} />
       </div>
@@ -6990,13 +7176,15 @@ export default function KaizenApp() {
       }
     } else {
       const id = uid();
-      // เลขที่ใหม่ = เลขสูงสุดของปีปัจจุบัน + 1 (รองรับข้อมูลที่นำเข้าจากระบบเดิม เช่น KZ-2026-146)
+      // เลขที่ใหม่ = เลขสูงสุดของปีปัจจุบัน + 1; TDC ขึ้นต้นด้วย "TDC-" แทน "KZ-"
       const year = new Date().getFullYear();
+      const deptIsTdc = isTDC(formData.department);
+      const prefix = deptIsTdc ? "TDC" : "KZ";
       const maxNo = kaizens.reduce((m, k) => {
-        const hit = String(k.registeredNo || "").match(new RegExp(`^KZ-${year}-(\\d+)$`));
+        const hit = String(k.registeredNo || "").match(new RegExp(`^${prefix}-${year}-(\\d+)$`));
         return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
       }, 0);
-      const registeredNo = `KZ-${year}-${String(maxNo + 1).padStart(3, "0")}`;
+      const registeredNo = `${prefix}-${year}-${String(maxNo + 1).padStart(3, "0")}`;
       const newRecord = {
         id,
         registeredNo,
@@ -7195,6 +7383,55 @@ export default function KaizenApp() {
     });
     upsertOpl(rec);
   };
+  // ====== Admin: Import Kaizen จาก Excel ======
+  const importKaizenExcel = async (file) => {
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      if (!rows.length) return { ok: false, error: "ไฟล์ Excel ไม่มีข้อมูล" };
+      let added = 0;
+      for (const r of rows) {
+        const title = String(r["เรื่อง"] || r["title"] || r["Title"] || "").trim();
+        if (!title) continue;
+        const dept = String(r["หน่วยงาน"] || r["หน่วยงาน (Unit)"] || r["department"] || r["Department"] || "").trim();
+        const deptIsTdc = isTDC(dept);
+        const prefix = deptIsTdc ? "TDC" : "KZ";
+        const year = new Date().getFullYear();
+        const maxNo = kaizens.reduce((m, k) => {
+          const hit = String(k.registeredNo || "").match(new RegExp(`^${prefix}-${year}-(\\d+)$`));
+          return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
+        }, 0);
+        const id = uid();
+        const registeredNo = `${prefix}-${year}-${String(maxNo + added + 1).padStart(3, "0")}`;
+        const newK = {
+          id, registeredNo, date: String(r["วันที่"] || r["date"] || r["Date"] || todayISO()).trim(),
+          title, team: String(r["ชื่อทีม"] || r["team"] || "").trim(),
+          department: dept || (departments[0] || ""),
+          submittedBy: String(r["ผู้ส่งเรื่อง"] || r["submittedBy"] || "").trim() || "Import",
+          activityType: String(r["ประเภทกิจกรรม"] || r["activityType"] || "Kaizen").trim(),
+          kaizenType: String(r["ประเภท Kaizen"] || r["kaizenType"] || "Kaizen Project").trim(),
+          problem: String(r["ปัญหา"] || r["1. ที่มาของปัญหาและสถานการณ์ปัจจุบัน"] || r["problem"] || "").trim(),
+          improvement: String(r["แนวทาง"] || r["2. แนวทางการปรับปรุง Improvement Idea"] || r["improvement"] || "").trim(),
+          budget: String(r["งบประมาณ"] || r["งบประมาณ (บาท)"] || r["budget"] || "0").trim(),
+          result: String(r["ผลที่ได้รับ"] || r["result"] || "").trim(),
+          costSaving: String(r["Cost Saving"] || r["Cost Saving (บาท/ปี)"] || r["costSaving"] || "0").trim(),
+          costSavingCalc: String(r["การคำนวณ"] || r["costSavingCalc"] || "").trim(),
+          categories: String(r["หมวดหมู่"] || r["categories"] || "").split(",").map((c) => c.trim()).filter(Boolean),
+          status: "pending_supervisor",
+          images: { before: [], after: [] }, attachments: [], history: [{ stage: "นำเข้า", actor: "Admin (Import)", action: "import", comment: `นำเข้าจาก Excel: ${file.name}`, date: nowStamp() }],
+        };
+        setKaizens((prev) => [...prev, newK]);
+        syncRecordToSheet(newK, "kaizen");
+        added++;
+      }
+      return { ok: true, count: added };
+    } catch (e) {
+      return { ok: false, error: String(e.message || e) };
+    }
+  };
+
   const ackOplRecord = async (o, payload) => {
     const nm = String((payload && payload.name) || "").trim();
     const section = String((payload && payload.section) || "").trim();
@@ -7518,13 +7755,24 @@ export default function KaizenApp() {
                 <div className="text-lg font-semibold" style={{ color: INK }}>{t("page.admin.title")}</div>
                 <div className="text-sm" style={{ color: SUB }}>ตรวจสอบข้อมูลการลงทะเบียน กำหนดประเภท Kaizen และหมวดหมู่ QCDSME ก่อนส่งต่อผู้อำนวยการ</div>
               </div>
-              <button
-                onClick={() => setShowDeptManager((s) => !s)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border whitespace-nowrap"
-                style={{ borderColor: "#D8DDE5", color: NAVY }}
-              >
-                <Building2 size={14} /> {showDeptManager ? "ซ่อนการจัดการหน่วยงาน" : "จัดการหน่วยงาน"}
-              </button>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border whitespace-nowrap cursor-pointer" style={{ borderColor: GREEN, color: GREEN }}>
+                  <FileSpreadsheet size={14} /> Import Excel
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return; e.target.value = "";
+                    const r = await importKaizenExcel(file);
+                    if (r.ok) alert(`นำเข้าสำเร็จ ${r.count} เรื่อง จาก ${file.name}`);
+                    else alert(`นำเข้าไม่สำเร็จ: ${r.error}`);
+                  }} />
+                </label>
+                <button
+                  onClick={() => setShowDeptManager((s) => !s)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border whitespace-nowrap"
+                  style={{ borderColor: "#D8DDE5", color: NAVY }}
+                >
+                  <Building2 size={14} /> {showDeptManager ? "ซ่อนการจัดการหน่วยงาน" : "จัดการหน่วยงาน"}
+                </button>
+              </div>
             </div>
             {showDeptManager && (
               <div className="mb-5">
