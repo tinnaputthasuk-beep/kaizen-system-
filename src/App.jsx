@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect, createContext, useContext } from "react";
 import {
   LayoutDashboard, User, ShieldCheck, Building2, PlusCircle, Eye, Pencil,
@@ -7445,7 +7444,7 @@ export default function KaizenApp() {
           history: [{ stage: "นำเข้า", actor: "Admin (Import)", action: "import", comment: `นำเข้าจาก Excel: ${file.name}`, date: nowStamp() }],
         };
         setKaizens((prev) => [...prev, newK]);
-        syncKaizenToSheet("save", newK);
+        syncKaizenToSheet("create", newK);
         added++;
       }
       return { ok: true, count: added };
