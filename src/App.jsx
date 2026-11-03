@@ -7389,38 +7389,59 @@ export default function KaizenApp() {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws);
+      // ตรวจจับว่าหัวคอลัมน์อยู่แถวไหน (ถ้าแถว 1 ว่าง ลองแถว 2, 3)
+      let rows = XLSX.utils.sheet_to_json(ws);
+      if (rows.length > 0) {
+        const firstKeys = Object.keys(rows[0]);
+        const allEmpty = firstKeys.every((k) => k.startsWith("__EMPTY") || !k.trim());
+        if (allEmpty) {
+          rows = XLSX.utils.sheet_to_json(ws, { range: 1 });
+          if (rows.length > 0) {
+            const k2 = Object.keys(rows[0]);
+            if (k2.every((k) => k.startsWith("__EMPTY") || !k.trim())) rows = XLSX.utils.sheet_to_json(ws, { range: 2 });
+          }
+        }
+      }
       if (!rows.length) return { ok: false, error: "ไฟล์ Excel ไม่มีข้อมูล" };
+      // Map: รองรับหลายรูปแบบหัวคอลัมน์
+      const col = (r, ...names) => { for (const n of names) { const v = r[n]; if (v !== undefined && v !== null && String(v).trim()) return String(v).trim(); } return ""; };
       let added = 0;
+      const yr = new Date().getFullYear();
+      // นับเลข running ที่มีอยู่แล้วก่อน import
+      let maxKZ = kaizens.reduce((m, k) => { const hit = String(k.registeredNo || "").match(new RegExp(`^KZ-${yr}-(\\d+)$`)); return hit ? Math.max(m, parseInt(hit[1], 10)) : m; }, 0);
+      let maxTDC = kaizens.reduce((m, k) => { const hit = String(k.registeredNo || "").match(new RegExp(`^TDC-${yr}-(\\d+)$`)); return hit ? Math.max(m, parseInt(hit[1], 10)) : m; }, 0);
       for (const r of rows) {
-        const title = String(r["เรื่อง"] || r["title"] || r["Title"] || "").trim();
+        const title = col(r, "หัวเรื่อง / ชื่อโครงการ", "หัวเรื่อง / ชื่อโครงการ ", "เรื่อง", "title", "Title", "หัวเรื่อง");
         if (!title) continue;
-        const dept = String(r["หน่วยงาน"] || r["หน่วยงาน (Unit)"] || r["department"] || r["Department"] || "").trim();
+        const dept = col(r, "หน่วยงาน(Unit)", "หน่วยงาน (Unit)", "หน่วยงาน", "department", "Department");
         const deptIsTdc = isTDC(dept);
         const prefix = deptIsTdc ? "TDC" : "KZ";
-        const year = new Date().getFullYear();
-        const maxNo = kaizens.reduce((m, k) => {
-          const hit = String(k.registeredNo || "").match(new RegExp(`^${prefix}-${year}-(\\d+)$`));
-          return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
-        }, 0);
-        const id = uid();
-        const registeredNo = `${prefix}-${year}-${String(maxNo + added + 1).padStart(3, "0")}`;
+        if (deptIsTdc) maxTDC++; else maxKZ++;
+        const seqNo = deptIsTdc ? maxTDC : maxKZ;
+        const registeredNo = `${prefix}-${yr}-${String(seqNo).padStart(3, "0")}`;
+        // วันที่: รองรับทั้ง Date object และ string
+        let dateStr = r["ว/ด/ป"] || r["วันที่"] || r["date"] || r["Date"] || "";
+        if (dateStr instanceof Date || (typeof dateStr === "number")) {
+          const d = typeof dateStr === "number" ? new Date((dateStr - 25569) * 86400000) : dateStr;
+          dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        } else { dateStr = String(dateStr).trim() || todayISO(); }
         const newK = {
-          id, registeredNo, date: String(r["วันที่"] || r["date"] || r["Date"] || todayISO()).trim(),
-          title, team: String(r["ชื่อทีม"] || r["team"] || "").trim(),
+          id: uid(), registeredNo, date: dateStr, title,
+          team: col(r, "ชื่อทีม", "team"),
           department: dept || (departments[0] || ""),
-          submittedBy: String(r["ผู้ส่งเรื่อง"] || r["submittedBy"] || "").trim() || "Import",
-          activityType: String(r["ประเภทกิจกรรม"] || r["activityType"] || "Kaizen").trim(),
-          kaizenType: String(r["ประเภท Kaizen"] || r["kaizenType"] || "Kaizen Project").trim(),
-          problem: String(r["ปัญหา"] || r["1. ที่มาของปัญหาและสถานการณ์ปัจจุบัน"] || r["problem"] || "").trim(),
-          improvement: String(r["แนวทาง"] || r["2. แนวทางการปรับปรุง Improvement Idea"] || r["improvement"] || "").trim(),
-          budget: String(r["งบประมาณ"] || r["งบประมาณ (บาท)"] || r["budget"] || "0").trim(),
-          result: String(r["ผลที่ได้รับ"] || r["result"] || "").trim(),
-          costSaving: String(r["Cost Saving"] || r["Cost Saving (บาท/ปี)"] || r["costSaving"] || "0").trim(),
-          costSavingCalc: String(r["การคำนวณ"] || r["costSavingCalc"] || "").trim(),
-          categories: String(r["หมวดหมู่"] || r["categories"] || "").split(",").map((c) => c.trim()).filter(Boolean),
+          submittedBy: col(r, "ผู้ส่ง", "ผู้ส่งเรื่อง", "submittedBy") || "Import",
+          activityType: col(r, "ประเภทกิจกรรม", "activityType") || "Kaizen",
+          kaizenType: col(r, "ประเภท Kaizen", "kaizenType") || "Kaizen Project",
+          problem: col(r, "สภาพปัญหา", "ปัญหา", "1. ที่มาของปัญหาและสถานการณ์ปัจจุบัน", "problem"),
+          improvement: col(r, "แนวทางการแก้ไข", "แนวทาง", "2. แนวทางการปรับปรุง Improvement Idea", "improvement"),
+          budget: col(r, "งบประมาณที่ใช้", "งบประมาณ", "งบประมาณ (บาท)", "budget") || "0",
+          result: col(r, "ผลที่ได้รับ", "result"),
+          costSaving: col(r, "Cost Saving", "Cost Saving (บาท/ปี)", "costSaving") || "0",
+          costSavingCalc: col(r, "การคำนวณ", "costSavingCalc"),
+          categories: col(r, "ประเภทข้อมูล", "หมวดหมู่", "categories").split(",").map((c) => c.trim()).filter(Boolean),
           status: "pending_supervisor",
-          images: { before: [], after: [] }, attachments: [], history: [{ stage: "นำเข้า", actor: "Admin (Import)", action: "import", comment: `นำเข้าจาก Excel: ${file.name}`, date: nowStamp() }],
+          images: { before: [], after: [] }, attachments: [],
+          history: [{ stage: "นำเข้า", actor: "Admin (Import)", action: "import", comment: `นำเข้าจาก Excel: ${file.name}`, date: nowStamp() }],
         };
         setKaizens((prev) => [...prev, newK]);
         syncKaizenToSheet("save", newK);
