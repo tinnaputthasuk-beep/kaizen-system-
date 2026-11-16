@@ -8,7 +8,7 @@ import {
   BookOpen, ClipboardCheck, DoorOpen, Lightbulb
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell,
   CartesianGrid, LineChart, Line, Legend, LabelList
 } from "recharts";
 import * as XLSX from "xlsx";
@@ -33,6 +33,14 @@ function siteFilter(list, site) {
   if (site === "bl") return list.filter((k) => !isTDC(k.department));
   if (site === "tdc") return list.filter((k) => isTDC(k.department));
   return list;
+}
+const DEFAULT_KPI_TARGETS = { total: 100, project: 60, cross: 20, costSaving: 500000 };
+function useKpiTargets() {
+  const [targets, setTargets] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem("kz_kpi_targets") || "null"); return v || DEFAULT_KPI_TARGETS; } catch { return DEFAULT_KPI_TARGETS; }
+  });
+  const save = (t) => { setTargets(t); localStorage.setItem("kz_kpi_targets", JSON.stringify(t)); };
+  return [targets, save];
 }
 // ======================================================================
 // ระบบสลับภาษา (ไทย / English / မြန်မာ) — ครอบคลุม: Login, หน้าสองประตู, เมนู, หัวข้อหน้า,
@@ -3326,6 +3334,21 @@ function ChartCard({ title, subtitle, children, counted, renderChart, id }) {
   );
 }
 
+function KpiSparkline({ data, dataKey, targetVal, color = "#fff", targetColor = "#ff6b6b", height = 60 }) {
+  if (!data || data.length < 2) return null;
+  return (
+    <div style={{ marginTop: 6, marginLeft: -8, marginRight: -8 }}>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
+          <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} />
+          <ReferenceLine y={targetVal} stroke={targetColor} strokeDasharray="4 3" strokeWidth={1.5} />
+          <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, padding: "4px 8px" }} formatter={(v) => [typeof v === "number" && v > 999 ? v.toLocaleString() : v, ""]} labelFormatter={(l) => l} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function KpiCard({ children, style, className = "" }) {
   const [hover, setHover] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -3351,9 +3374,18 @@ function KpiCard({ children, style, className = "" }) {
   );
 }
 
-function Dashboard({ data, departments, onView, onPresent }) {
+function Dashboard({ data, departments, onView, onPresent, currentUser }) {
   const { lang, t } = useI18n();
-  const [site, setSite] = useState("all");
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "director";
+  const userSite = useMemo(() => {
+    if (isAdmin) return "all";
+    if ((currentUser?.departments || []).some((d) => isTDC(d))) return "tdc";
+    return "bl";
+  }, [currentUser, isAdmin]);
+  const [site, setSite] = useState(userSite);
+  const canSwitchSite = isAdmin;
+  const [kpiTargets, setKpiTargets] = useKpiTargets();
+  const [editingTarget, setEditingTarget] = useState(null);
   const siteData = useMemo(() => siteFilter(data, site), [data, site]);
   // ตัวกรองทุกตัวเลือกได้หลายค่า (ว่าง = ทุกค่า) · เลือกหลายค่าในตัวกรองเดียวกัน = "หรือ" · ต่างตัวกรอง = "และ"
   const [yearFilter, setYearFilter] = useState([]);
@@ -3447,6 +3479,26 @@ function Dashboard({ data, departments, onView, onPresent }) {
     });
   }, [counted]);
 
+  // Monthly cumulative trends for KPI sparklines
+  const kpiTrends = useMemo(() => {
+    const months = {}; const cMonths = {};
+    counted.forEach((k) => {
+      const mo = k.date.slice(0, 7);
+      months[mo] = (months[mo] || { total: 0, project: 0, cross: 0, cost: 0 });
+      months[mo].total++;
+      if (k.kaizenType === "Kaizen Project") months[mo].project++;
+      if (k.kaizenType === "Cross functional Kaizen") months[mo].cross++;
+      months[mo].cost += parseFloat(k.costSaving) || 0;
+    });
+    const sorted = Object.keys(months).sort();
+    let cumT = 0, cumP = 0, cumC = 0, cumCost = 0;
+    return sorted.map((mo) => {
+      cumT += months[mo].total; cumP += months[mo].project; cumC += months[mo].cross; cumCost += months[mo].cost;
+      const [y, m] = mo.split("-");
+      return { name: THAI_MONTHS[parseInt(m, 10) - 1]?.slice(0, 3) || m, total: cumT, project: cumP, cross: cumC, cost: Math.round(cumCost), month: months[mo].total, mProject: months[mo].project, mCross: months[mo].cross, mCost: months[mo].cost };
+    });
+  }, [counted]);
+
   const total = counted.length;
   const kaizenProjectCount = counted.filter((k) => k.kaizenType === "Kaizen Project").length;
   const crossFunctionalCount = counted.filter((k) => k.kaizenType === "Cross functional Kaizen").length;
@@ -3515,16 +3567,24 @@ function Dashboard({ data, departments, onView, onPresent }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-1.5 mb-1">
-        {SITE_TABS.map(({ key, label, labelEn, labelMm }) => {
-          const lbl = lang === "en" ? labelEn : lang === "mm" ? labelMm : label;
-          return (
-            <button key={key} type="button" onClick={() => setSite(key)} className="text-sm px-4 py-2 rounded-lg font-semibold" style={site === key ? { background: NAVY, color: "white" } : { background: "#EEF0F3", color: SUB }}>
-              {lbl}
-            </button>
-          );
-        })}
-      </div>
+      {canSwitchSite ? (
+        <div className="flex items-center gap-1.5 mb-1">
+          {SITE_TABS.map(({ key, label, labelEn, labelMm }) => {
+            const lbl = lang === "en" ? labelEn : lang === "mm" ? labelMm : label;
+            return (
+              <button key={key} type="button" onClick={() => setSite(key)} className="text-sm px-4 py-2 rounded-lg font-semibold" style={site === key ? { background: NAVY, color: "white" } : { background: "#EEF0F3", color: SUB }}>
+                {lbl}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 mb-1">
+          <div className="text-sm px-4 py-2 rounded-lg font-semibold" style={{ background: NAVY, color: "white" }}>
+            {userSite === "tdc" ? "TDC 1.0 (ระยอง)" : "BL (บางเลน)"}
+          </div>
+        </div>
+      )}
       <div className="rounded-2xl p-4" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
         <div className="flex flex-wrap gap-2.5 items-center">
           <div className="flex items-center gap-1.5 text-xs font-medium text-white/90 pr-1"><Filter size={14} /> ตัวกรอง</div>
@@ -3558,21 +3618,21 @@ function Dashboard({ data, departments, onView, onPresent }) {
       </div>
       <div className="grid grid-cols-4 gap-4">
         <KpiCard className="text-white" style={{ background: `linear-gradient(135deg, ${DB_DEEP}, ${DB_BLUE})` }}>
-          <div className="text-xs font-medium text-white/80">{t("dash.kpiTotal")}</div>
-          <div className="text-3xl font-semibold mt-1.5">{total}</div>
-          <div className="text-xs mt-1 text-white/70">{t("dash.kpiTotalSub")}</div>
+          <div className="flex items-center justify-between"><div className="text-xs font-medium text-white/80">{t("dash.kpiTotal")}</div>{total >= kpiTargets.total ? <CheckCircle2 size={18} className="text-green-300" /> : <AlertTriangle size={18} className="text-red-300" />}</div>
+          <div className="text-3xl font-semibold mt-1">{total}</div>
+          <div className="flex items-center gap-1.5 mt-1"><div className="text-[10px] text-white/60">Target:</div>{editingTarget === "total" ? <input type="number" className="w-16 text-xs px-1 py-0.5 rounded text-center" style={{ color: "#333" }} defaultValue={kpiTargets.total} onBlur={(e) => { setKpiTargets({ ...kpiTargets, total: parseInt(e.target.value) || 0 }); setEditingTarget(null); }} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} autoFocus /> : <div className="text-[11px] text-white/90 font-semibold cursor-pointer" onClick={() => isAdmin && setEditingTarget("total")}>{kpiTargets.total.toLocaleString()}{isAdmin && <span className="ml-1 text-[9px] text-white/40">✏️</span>}</div>}</div>
           <SiteSub bl={blTotal} tdc={tdcTotal} />
         </KpiCard>
         <KpiCard style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
-          <div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiProject")}</div>
-          <div className="text-3xl font-semibold mt-1.5" style={{ color: DB_DEEP }}>{kaizenProjectCount}</div>
-          <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>{t("dash.kpiProjectSub")}</div>
+          <div className="flex items-center justify-between"><div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiProject")}</div>{kaizenProjectCount >= kpiTargets.project ? <CheckCircle2 size={18} style={{ color: "#2F7D5C" }} /> : <AlertTriangle size={18} style={{ color: "#D94848" }} />}</div>
+          <div className="text-3xl font-semibold mt-1" style={{ color: DB_DEEP }}>{kaizenProjectCount}</div>
+          <div className="flex items-center gap-1.5 mt-1"><div className="text-[10px]" style={{ color: "#6E88A6" }}>Target:</div>{editingTarget === "project" ? <input type="number" className="w-16 text-xs px-1 py-0.5 rounded border text-center" defaultValue={kpiTargets.project} onBlur={(e) => { setKpiTargets({ ...kpiTargets, project: parseInt(e.target.value) || 0 }); setEditingTarget(null); }} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} autoFocus /> : <div className="text-[11px] font-semibold cursor-pointer" style={{ color: DB_DEEP }} onClick={() => isAdmin && setEditingTarget("project")}>{kpiTargets.project.toLocaleString()}{isAdmin && <span className="ml-1 text-[9px]" style={{ color: "#AAB" }}>✏️</span>}</div>}</div>
           <SiteSub bl={blProject} tdc={tdcProject} />
         </KpiCard>
         <KpiCard style={{ background: DB_PALE, border: `1px solid ${DB_BORDER}` }}>
-          <div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiCross")}</div>
-          <div className="text-3xl font-semibold mt-1.5" style={{ color: DB_DEEP }}>{crossFunctionalCount}</div>
-          <div className="text-xs mt-1" style={{ color: "#6E88A6" }}>{t("dash.kpiCrossSub")}</div>
+          <div className="flex items-center justify-between"><div className="text-xs font-medium" style={{ color: DB_BLUE }}>{t("dash.kpiCross")}</div>{crossFunctionalCount >= kpiTargets.cross ? <CheckCircle2 size={18} style={{ color: "#2F7D5C" }} /> : <AlertTriangle size={18} style={{ color: "#D94848" }} />}</div>
+          <div className="text-3xl font-semibold mt-1" style={{ color: DB_DEEP }}>{crossFunctionalCount}</div>
+          <div className="flex items-center gap-1.5 mt-1"><div className="text-[10px]" style={{ color: "#6E88A6" }}>Target:</div>{editingTarget === "cross" ? <input type="number" className="w-16 text-xs px-1 py-0.5 rounded border text-center" defaultValue={kpiTargets.cross} onBlur={(e) => { setKpiTargets({ ...kpiTargets, cross: parseInt(e.target.value) || 0 }); setEditingTarget(null); }} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} autoFocus /> : <div className="text-[11px] font-semibold cursor-pointer" style={{ color: DB_DEEP }} onClick={() => isAdmin && setEditingTarget("cross")}>{kpiTargets.cross.toLocaleString()}{isAdmin && <span className="ml-1 text-[9px]" style={{ color: "#AAB" }}>✏️</span>}</div>}</div>
           <SiteSub bl={blCross} tdc={tdcCross} />
         </KpiCard>
         <div
@@ -3592,11 +3652,9 @@ function Dashboard({ data, departments, onView, onPresent }) {
           >
             <Coins size={16} className="text-white" />
           </div>
-          <div className="text-xs font-semibold text-white/90 relative">{t("dash.kpiCostSaving")}</div>
-          <div className="text-4xl font-extrabold mt-1.5 text-white relative tracking-tight">
-            {totalCostSaving.toLocaleString()}
-          </div>
-          <div className="text-xs mt-1 text-white/85 font-medium relative">{t("dash.kpiCostSavingSub")}</div>
+          <div className="flex items-center justify-between relative"><div className="text-xs font-semibold text-white/90">{t("dash.kpiCostSaving")}</div>{totalCostSaving >= kpiTargets.costSaving ? <CheckCircle2 size={18} className="text-green-300" /> : <AlertTriangle size={18} className="text-red-300" />}</div>
+          <div className="text-4xl font-extrabold mt-1.5 text-white relative tracking-tight">{totalCostSaving.toLocaleString()}</div>
+          <div className="flex items-center gap-1.5 mt-1 relative"><div className="text-[10px] text-white/60">Target:</div>{editingTarget === "costSaving" ? <input type="number" className="w-24 text-xs px-1 py-0.5 rounded text-center" style={{ color: "#333" }} defaultValue={kpiTargets.costSaving} onBlur={(e) => { setKpiTargets({ ...kpiTargets, costSaving: parseInt(e.target.value) || 0 }); setEditingTarget(null); }} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} autoFocus /> : <div className="text-[11px] text-white/90 font-semibold cursor-pointer" onClick={() => isAdmin && setEditingTarget("costSaving")}>{kpiTargets.costSaving.toLocaleString()}{isAdmin && <span className="ml-1 text-[9px] text-white/40">✏️</span>}</div>}</div>
           <SiteSub bl={blCostSaving.toLocaleString()} tdc={tdcCostSaving.toLocaleString()} />
         </div>
       </div>
@@ -7700,7 +7758,7 @@ export default function KaizenApp() {
               <div className="text-lg font-semibold" style={{ color: INK }}>{t("dash.title")}</div>
               <div className="text-sm" style={{ color: SUB }}>{t("dash.subtitle")}</div>
             </div>
-            <Dashboard data={kaizens} departments={departments} onView={(k) => setViewing(k)} onPresent={(k) => setPresenting(k)} />
+            <Dashboard data={kaizens} departments={departments} onView={(k) => setViewing(k)} onPresent={(k) => setPresenting(k)} currentUser={currentUser} />
           </>
         )}
 
